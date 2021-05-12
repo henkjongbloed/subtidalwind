@@ -16,12 +16,12 @@ warnings.filterwarnings('ignore')
 gp = globalParameters() #Setting parameters such as BC, alpha
 
 #ndd = makeNDDict(gp['n'][3]*np.array([1,1,1]))
-'''
+
 ndd = makeNDDict(gp, 'Ra', 'Fr', 'Fw' )
 PS = ParameterSweep(gp,ndd,0).run()
 plotNDim(PS)
 plt.show()
-
+'''
 ndd = makeNDDict(gp, 'Ra','Fw',Fr = 1e-2)
 PS = ParameterSweep(gp,ndd,0).run()
 plotNDim(PS)
