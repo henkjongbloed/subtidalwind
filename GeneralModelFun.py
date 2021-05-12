@@ -193,7 +193,7 @@ def makeNDDict(gp, *args, **kwargs):
             ndd[key] = value
         
     if len(args) == 0:
-        ndd = dim2nondim(dd)
+        #ndd = dim2nondim(dd)
         ndd['pars'] = 'None'
         ndd['nps'] = 1
         return ndd
@@ -207,10 +207,10 @@ def makeNDDict(gp, *args, **kwargs):
         print('Wrong function input')
         return        
         #ndd['nps'] = n
-        
+
     #Default sweep ranges: Independent variables.
-    Ra = np.logspace(0, 6, n)    
-    Fr = np.logspace(np.log10(5) - 5 , np.log10(1) , n)
+    Ra = np.logspace(1, 5, n)    
+    Fr = np.logspace(-4 , 0 , n)
     if n > 1:
         if n % 2 == 0: n = n + 1
         Fw = np.concatenate((-np.logspace(1.5,-4, int((n-1)/2)), np.array([0]), np.logspace(-4,1.5,int((n-1)/2))))
@@ -252,23 +252,16 @@ def Sverdrup(tau_w, K_M0, beta):
     K_M = K_M0 + beta*np.abs(tau_w)
     return K_M
 
-def computeMask(b,c, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
+def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
     '''Compute relevant masks (after non-unique Sb_X0 and Xa have already been masked). Notice that the Dijkstra slip condition is used.'''
     C = gp['C']
     r = np.linspace(ra, 0, gp['PSGrid'][0])
-    X = 3/2*Sb_X0**2*(np.exp(-2*r)-1) + 2*b*Sb_X0*(np.exp(-r)-1) - c*r
-    Sb = Sb_X0**3*np.exp(-3*r) + b*Sb_X0**2*np.exp(-2*r) + c*Sb_X0*np.exp(-r)
-    Sb_X = Sb_X0*np.exp(-r)
-    Sb_XX = Sb_X/(3*Sb_X**2 + 2*b)
-    P40 = -7/300
-    P50 = -23/7200
-    P60 = -11/600
-    P4 = -7/300 + 1/10 - 1/20
-    P5 = -23/7200 + 1/60 - 3/160 - 1/120*-1
-    P6 = -11/600 + 3/20 -1/6 + 1/20     
-    #D2, x, y = computeLocalExtrema(1,b,c,0) # D2, [xright,xleft,bpx], [yright,yleft,bpy]
-    SXsurface = Sb + C[12]*Sc**(2/3)*Fr**(1/3)*(Fr*P40 + Fw*P60)*Sb_X + C[13]*Sc**(1/3)*Fr**(2/3)*P50*Sb_X**2
-    SXbottom = Sb + C[12]*Sc**(2/3)*Fr**(1/3)*(Fr*P4 + Fw*P6)*Sb_X + C[13]*Sc**(1/3)*Fr**(2/3)*P5*Sb_X**2
+    X = (3/2*Sb_X0**2*a*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
+    Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
+    Sb_X = Sb_X0*np.exp(r)
+    Sb_XX = Sb_X/(3*a*Sb_X**2 + 2*b) #check this
+    SXsurface = Sb + Sc*Ra*(Fr*C[6] + Fw*C[8])*Sb_X + Sc*Ra**2*C[7]*Sb_X**2
+    SXbottom = Sb + Sc*Ra*(Fr*C[9] + Fw*C[11])*Sb_X + Sc*Ra**2*C[10]*Sb_X**2
     maskNonUnique = np.any(Sb[1:] <= Sb[:-1]) # 1 if there are local extrema (if there is non-monotonicity)
     maskUnStable = np.any((SXbottom - SXsurface < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
     maskNegative = np.any((SXsurface < -gp['tolNEG'])) # 1 if there is negative salt
@@ -278,14 +271,7 @@ def computeMask(b,c, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
     _, sigmap = np.meshgrid(X,sigma)
 
     _, _, _, P4, P5, P6, _ = formFunctions(sigmap, gp['BC'])
-    #Ubar = Fr*np.ones_like(sigmap)    
-    #UR = Fr*P1
-    #UG = C[12]*Sc**(-1/3)*Fr**(1/3)*P2*np.matlib.repmat(np.transpose(Sb_X),nsigma,1)
-    #UW = Fw*P3   
-    #temp = np.transpose(Sb)# np.matlib.repmat(np.transpose(Sb),nsigma,1) -> Start here!!!!
-    #print(temp)
-    #self.Sbar = np.matlib.repmat(np.transpose(Sb),nsigma,1) 
-    SaccX = C[12]*Sc**(2/3)*Fr**(1/3)*(Fr*P4 + Fw*P6)*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + C[13]*Sc**(1/3)*Fr**(2/3)*P5*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
+    SaccX = Sc*Ra*(Fr*P4 + Fw*P6)*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + Sc*Ra**2*P5*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
     #epsilon = .5
     #Choice 1: Integral rule
     #trapacc = 1/(nsigma-1)*(np.sum(np.abs(SaccX[1:-1,:]),0) + (np.abs(SaccX[0,:]) + np.abs(SaccX[-1,:]))/2) #trapezoidal rule
@@ -293,17 +279,17 @@ def computeMask(b,c, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
     #Choice 2: Max rule
     maxacc = np.amax(np.abs(SaccX),0)
     maskPritchard = np.any((maxacc > gp['tolPrit']*Sb_X))
-    #print(np.shape(np.abs(SaccX[:,1:-2])))
-    
-    #U =  Ubar + UR + UG + UW
-    #UX = C[12]*Sc**(-1/3)*Fr**(1/3)*P2*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1)
-    #self.Ubar, self.UR, self.UG, self.UW = Ubar, UR, UG, UW
-    
     return bool(maskNonUnique), bool(maskUnStable), bool(maskNegative), bool(maskPritchard)
 
 #def computeScaling()
 
-def I0(x,a,b,c):
+def Int3(bl, bu, a, b, c):
+    return 3*a*(I3(bu,a,b,c)-I3(bl,a,b,c)) + 2*b*(I2(bu,a,b,c)-I2(bl,a,b,c)) + c*(I1(bu,a,b,c)-I1(bl,a,b,c))
+
+def Int2(bl, bu, a, b, c):
+    return 3*a*(I2(bu,a,b,c)-I2(bl,a,b,c)) + 2*b*(I1(bu,a,b,c)-I1(bl,a,b,c)) + c*(I0(bu,a,b,c)-I0(bl,a,b,c))
+
+def I0(x, a, b, c):
     ''' Compute the integral of 1/(au^2 + bu + c) and fill in x'''
     D = b**2 - 4*a*c
     
@@ -319,17 +305,17 @@ def I0(x,a,b,c):
 
 #I0 = np.vectorize(I0a, otypes=[np.ndarray])
 
-def I1(x,a,b,c):
+def I1(x, a, b, c):
     ''' Compute the integral of u/(au^2 + bu + c) and fill in x'''
     I = 1/(2*a)*np.log(np.abs(a*x**2 + b*x + c)) - b/(2*a)*I0(x,a,b,c)
     return I
 
-def I2(x,a,b,c):
+def I2(x, a, b, c):
     ''' Compute the integral of u^2/(au^2 + bu + c) and fill in x'''
     I = x/a - b/(2*a**2)*np.log(np.abs(a*x**2 + b*x + c)) + (b**2 - 2*a*c)/(2*a**2)*I0(x,a,b,c)
     return I
 
-def I3(x,a,b,c):
+def I3(x, a, b, c):
     ''' Compute the integral of u^3/(au^2 + bu + c) and fill in x'''
     I = x**2/(2*a) - b*x/a**2 + (b**2-a*c)/(2*a**3)*np.log(np.abs(a*x**2 + b*x + c)) - b*(b**2 - 3*a*c)/(2*a**3)*I0(x,a,b,c)
     return I
@@ -1065,7 +1051,7 @@ def plotSModel(SM):
         if t<7:
             axs[0,1].plot(X, T[t], label = labT[t], color = col[t])
         else:
-            axs[0,1].plot(X, -T[t], '-.', label = labT[t], color = col[t])
+            axs[0,1].plot(X, np.abs(T[t]), '-.', label = labT[t], color = col[t])
     axs[0,1].title.set_text('Salt transport')
     axs[0,1].set_xlabel(r'$X$')
     axs[0,1].set_ylabel('Relative contribution')
@@ -1074,7 +1060,7 @@ def plotSModel(SM):
     
 
     # Change the bar colors here
-    SM.aTT[-1] = -SM.aTT[-1]
+    SM.aTT[-1] = np.abs(SM.aTT[-1])
     axs[1,1].bar(labT, SM.aTT, color=col)
     axs[1,1].bar(labT[-1], SM.aTT[-1], color=col[-1], hatch = '//')
     axs[1,1].title.set_text('Integrated salt transport: Regime = '+ np.array2string(*SM.Reg))
@@ -1086,7 +1072,7 @@ def plotSModel(SM):
     sbxmax = max([SM.Exx[0], np.max(Sb_X)])
 
     Sb_Xplot = np.linspace(sbxmin, sbxmax, 201)
-    Sbplot = np.polyval([1,SM.b,SM.c,0], Sb_Xplot)
+    Sbplot = np.polyval([SM.a/SM.d,SM.b/SM.d,SM.c/SM.d,0], Sb_Xplot)
     
     axs[2,1].plot(Sb_Xplot, Sbplot, ls = 'dotted', label = 'Curve')
     axs[2,1].plot(Sb_X, Sb, lw = 2, label = 'Realised')
@@ -1101,75 +1087,36 @@ def plotSModel(SM):
     
     
 def addC(BC):
-    C = np.zeros(20)
-    if BC == 0:
-        C[0] = 0 #dummy
-        C[1] = 493/362880 #-P2P5
-        C[2] = 0 #-P1P5 = -P2P4
-        C[3] = 2*-197/120960 #-P3P5 = -P2P6
-        C[4] = 0 #-P1P4
-        C[5] = 0 #-P1P6 = -P3P4
-        C[6] = 2/945 #-P3P6
-        C[7] = C[2]*C[1]**(-2/3)
-        C[8] = C[3]*C[1]**(-2/3)
-        C[9] = C[4]*C[1]**(-1/3)
-        C[10] = C[5]*C[1]**(-1/3)
-        C[11] = C[6]*C[1]**(-1/3)
-        C[12] = C[1]**(-1/3)
-        C[13] = C[1]**(-2/3)
-
-        C[14] = 0 #P4(0)
-        C[15] = 11/720 #P5(0)
-        C[16] = -1/45 #P6(0)
-        C[17] = 0 #P4(-1)
-        C[18] = -13/720 #P5(-1)
-        C[19] = 7/360 #P6(-1)
-        
+    C = np.zeros(12)
     if BC == 1:
-        C[0] = 0 #dummy
-        C[1] = 881/18144000 #-P2P5
-        C[2] = 2*191/504000 #-P1P5 = -P2P4
-        C[3] = 2*43/168000 #-P3P5 = -P2P6
-        C[4] = 8/2625 #-P1P4
-        C[5] = 2*41/21000 #-P1P6 = -P3P4
-        C[6] = 29/21000 #-P3P6
-        C[7] = C[2]*C[1]**(-2/3)
-        C[8] = C[3]*C[1]**(-2/3)
-        C[9] = C[4]*C[1]**(-1/3)
-        C[10] = C[5]*C[1]**(-1/3)
-        C[11] = C[6]*C[1]**(-1/3)
-        C[12] = C[1]**(-1/3)
-        C[13] = C[1]**(-2/3)
+        C[0] = 881/18144000 #-P2P5
+        C[1] = 2*191/504000 #-P1P5 = -P2P4
+        C[2] = 2*43/168000 #-P3P5 = -P2P6
+        C[3] = 8/2625 #-P1P4
+        C[4] = 2*41/21000 #-P1P6 = -P3P4
+        C[5] = 29/21000 #-P3P6
 
-        C[14] = -7/300 #P4(0)
-        C[15] = -23/7200 #P5(0)
-        C[16] = -11/600 #P6(0)
-        C[17] = 2/75 #P4(-1)
-        C[18] = 11/3600  #P5(-1)
-        C[19] = 3/200 #P6(-1)
+        C[6] = -7/300 #P4(0)
+        C[7] = -23/7200 #P5(0)
+        C[8] = -11/600 #P6(0)
+        C[9] = 2/75 #P4(-1)
+        C[10] = 11/3600  #P5(-1)
+        C[11] = 3/200 #P6(-1)
     
-    if BC == -1:
-        C[0] = 0 #dummy
-        C[1] = 19/1451520 #P2P5
-        C[2] = 2*19/40320 #P1P5 = P2P4
-        C[3] = 2*1/11520 #P3P5 = P2P6
-        C[4] = 2/105 #P1P4
-        C[5] = 2*1/336 #P1P6 = P3P4
-        C[6] = 1/1680 #P3P6
-        C[7] = C[2]*C[1]**(-2/3)
-        C[8] = C[3]*C[1]**(-2/3)
-        C[9] = C[4]*C[1]**(-1/3)
-        C[10] = C[5]*C[1]**(-1/3)
-        C[11] = C[6]*C[1]**(-1/3)
-        C[12] = C[1]**(-1/3)
-        C[13] = C[1]**(-2/3)
+    if BC == 'Inf':
+        C[0] = 19/1451520 #P2P5
+        C[1] = 2*19/40320 #P1P5 = P2P4
+        C[2] = 2*1/11520 #P3P5 = P2P6
+        C[3] = 2/105 #P1P4
+        C[4] = 2*1/336 #P1P6 = P3P4
+        C[5] = 1/1680 #P3P6
 
-        C[14] = -7/120 #P4(0)
-        C[15] = -1/576 #P5(0)
-        C[16] = -1/80 #P6(0)
-        C[17] = 1/15 #P4(-1)
-        C[18] = 1/720 #P5(-1)
-        C[19] = 1/120 #P6(-1)
+        C[6] = -7/120 #P4(0)
+        C[7] = -1/576 #P5(0)
+        C[8] = -1/80 #P6(0)
+        C[9] = 1/15 #P4(-1)
+        C[10] = 1/720 #P5(-1)
+        C[11] = 1/120 #P6(-1)
     #Sc = 2.2
     return C
 

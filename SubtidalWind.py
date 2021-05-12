@@ -17,7 +17,7 @@ gp = globalParameters() #Setting parameters such as BC, alpha
 
 #ndd = makeNDDict(gp['n'][3]*np.array([1,1,1]))
 
-ndd = makeNDDict(gp, 'Ra', 'Fr', 'Fw' )
+ndd = makeNDDict(gp, 'Ra', 'Fw', Fr = 1e-2 )
 PS = ParameterSweep(gp,ndd,0).run()
 plotNDim(PS)
 plt.show()
@@ -32,7 +32,7 @@ PS = ParameterSweep(gp,ndd,1).run()
 plotDim(PS, dd)
 # Hello World!
 '''
-ndd = makeNDDict(gp)
+ndd = makeNDDict(gp, Fr=0.00001, Ra=100)
 SM = SingleNonDim(gp, ndd).run()
 plotSModel(SM)
 #ndd2 = makeNDDict(gp)
