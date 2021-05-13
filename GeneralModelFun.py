@@ -9,7 +9,7 @@ import matplotlib.colors as co
 
 
 def globalParameters(**kwargs):
-    gp = dict(BC = 1, #1 = partial Slip (dijkstra), 0 = zero friction, -1 = infinite friction (MacCready)
+    gp = dict(BC = 2, #R: real or Inf
         alpha = 1/30, #Salinity fraction at landward end
         n = [1, 401, 25, 11], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
         SMGrid = [1001,21], #Single model run: grid.
@@ -1086,24 +1086,24 @@ def plotSModel(SM):
     # From here, we continue with PS
     
     
-def addC(BC):
+def addC(R):
     C = np.zeros(12)
-    if BC == 1:
-        C[0] = 881/18144000 #-P2P5
-        C[1] = 2*191/504000 #-P1P5 = -P2P4
-        C[2] = 2*43/168000 #-P3P5 = -P2P6
-        C[3] = 8/2625 #-P1P4
-        C[4] = 2*41/21000 #-P1P6 = -P3P4
-        C[5] = 29/21000 #-P3P6
+    if R != 'Inf':
+        C[0] = (19*R**2+285*R+1116)/(1451520*R**2 + 8709120*R + 13063680) #-P2P5
+        C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4
+        C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6
+        C[3] = (2*R**2)/(105*R**2 + 630*R + 945) #-P1P4
+        C[4] = (5*R**2+31*R)/(840*R**2 + 5040*R + 7560) #-P1P6 = -P3P4
+        C[5] = (R**2+11*R+32)/(1680*R**2 + 10080*R + 15120) #-P3P6
 
-        C[6] = -7/300 #P4(0)
-        C[7] = -23/7200 #P5(0)
-        C[8] = -11/600 #P6(0)
-        C[9] = 2/75 #P4(-1)
-        C[10] = 11/3600  #P5(-1)
-        C[11] = 3/200 #P6(-1)
+        C[6] = -7/120*R/(R+3) #P4(0)
+        C[7] = -1/2880*(5*R+36)/(R+3) #P5(0)
+        C[8] = -1/240*(3*R+16)/(R+3) #P6(0)
+        C[9] = R/(R+3)*(-1/8 + 1/4 - 7/120) #P4(-1)
+        C[10] = 1/120 - (R+4)/(R+3)/64+(R+6)/(R+3)/96 + C[7]  #P5(-1)
+        C[11] = (R+2)/(R+3)/16 - 1/6 + (R+4)/(R+3)/8+C[8] #P6(-1)
     
-    if BC == 'Inf':
+    else:
         C[0] = 19/1451520 #P2P5
         C[1] = 2*19/40320 #P1P5 = P2P4
         C[2] = 2*1/11520 #P3P5 = P2P6
@@ -1115,9 +1115,10 @@ def addC(BC):
         C[7] = -1/576 #P5(0)
         C[8] = -1/80 #P6(0)
         C[9] = 1/15 #P4(-1)
-        C[10] = 1/720 #P5(-1)
-        C[11] = 1/120 #P6(-1)
+        C[10] = 1/720 #P5(-1) #Check this
+        C[11] = 1/120 #P6(-1) #Check this
     #Sc = 2.2
+    print(C)
     return C
 
 def formFunctions(sigmap, BC):
