@@ -15,19 +15,8 @@ np.seterr(divide = 'ignore')
 warnings.filterwarnings('ignore')
 gp = globalParameters(R = 2) #Setting parameters such as BC, alpha
 
-#ndd = makeNDDict(gp['n'][3]*np.array([1,1,1]))
 
-ndd = makeNDDict(gp, 'Ra', 'Fr', Fw = 0 )
-PS = ParameterSweep(gp,ndd,0).run()
-plotNDim(PS)
-plt.show()
-
-ndd = makeNDDict(gp, 'Ra','Fw',Fr = 1e-2)
-PS = ParameterSweep(gp,ndd,0).run()
-plotNDim(PS)
-plt.show()
-
-dd, ndd = makeDicts(gp,'H', 'K_M', tau_w = -.1)
+dd, ndd = makeDicts(gp,'H', tau_w = .1)
 PS = ParameterSweep(gp,ndd,1).run()
 plotDim(PS, dd)
 # Hello World!

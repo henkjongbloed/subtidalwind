@@ -151,13 +151,13 @@ class ParameterSweep:
         self.domTermPlot = maxTT
         Sb0 = self.Sb_0
         #theoretical salt intrusion lengths -> change
-        self.LSReg = [3/2*Sb0**(2/3)*L[0]*(1-alpha**2/3),
-                2*np.sqrt(L[1])*(np.sqrt(Sb0) - alpha**2*Sb0**2), 
-                2*np.sqrt(L[2])*(np.sqrt(Sb0) - alpha**2*Sb0**2),
-                -L[3]*np.log(Sb0*alpha),
-                -L[4]*np.log(Sb0*alpha),
-                -L[5]*np.log(Sb0*alpha),
-                -L[6]*np.log(Sb0*alpha)] 
+        self.LSReg = [3/2*Sb0**(2/3)*L[0]*(1-alpha**2/3)/L[7],
+                2*np.sqrt(L[1])*(np.sqrt(Sb0) - alpha**2*Sb0**2)/L[7], 
+                2*np.sqrt(L[2])*(np.sqrt(Sb0) - alpha**2*Sb0**2)/L[7],
+                -L[3]/L[7]*np.log(Sb0*alpha),
+                -L[4]/L[7]*np.log(Sb0*alpha),
+                -L[5]/L[7]*np.log(Sb0*alpha),
+                -L[6]/L[7]*np.log(Sb0*alpha)]
         #Look into this!!
         #print(self.domTerm)
         #Apply further masks.
