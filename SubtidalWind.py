@@ -13,29 +13,32 @@ import warnings
 
 np.seterr(divide = 'ignore') 
 warnings.filterwarnings('ignore')
-gp = globalParameters() #Setting parameters such as BC, alpha
+gp = globalParameters(R = 2) #Setting parameters such as BC, alpha
 
 #ndd = makeNDDict(gp['n'][3]*np.array([1,1,1]))
 
-ndd = makeNDDict(gp, 'Ra', 'Fw', Fr = 1e-2 )
+ndd = makeNDDict(gp, 'Ra', 'Fr', Fw = 0 )
 PS = ParameterSweep(gp,ndd,0).run()
 plotNDim(PS)
 plt.show()
-'''
+
 ndd = makeNDDict(gp, 'Ra','Fw',Fr = 1e-2)
 PS = ParameterSweep(gp,ndd,0).run()
 plotNDim(PS)
 plt.show()
 
-dd, ndd = makeDicts(gp,'H', 'K_M', tau_w = .01)
+dd, ndd = makeDicts(gp,'H', 'K_M', tau_w = -.1)
 PS = ParameterSweep(gp,ndd,1).run()
 plotDim(PS, dd)
 # Hello World!
-'''
-ndd = makeNDDict(gp, Fr=0.00001, Ra=100)
+plt.show()
+
+ndd = makeNDDict(gp, Fw=0)
 SM = SingleNonDim(gp, ndd).run()
 plotSModel(SM)
 #ndd2 = makeNDDict(gp)
+plt.show()
+
 '''
 expar = ['']
 EX, dd = [], 10*[None]

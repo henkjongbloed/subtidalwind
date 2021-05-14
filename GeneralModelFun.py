@@ -9,7 +9,7 @@ import matplotlib.colors as co
 
 
 def globalParameters(**kwargs):
-    gp = dict(BC = 2, #R: real or Inf
+    gp = dict(R = 'Inf', #R: real or Inf
         alpha = 1/30, #Salinity fraction at landward end
         n = [1, 401, 25, 11], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
         SMGrid = [1001,21], #Single model run: grid.
@@ -19,7 +19,7 @@ def globalParameters(**kwargs):
         tolPrit = 10,
         Sc = 2.2
         )
-    gp['C'] = addC(gp['BC'])
+    gp['C'] = addC(gp['R'])
     for key, value in kwargs.items(): #Change the constant parameters
             gp[key] = value
     return gp
@@ -259,7 +259,7 @@ def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
     X = (3/2*Sb_X0**2*a*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
     Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
     Sb_X = Sb_X0*np.exp(r)
-    Sb_XX = Sb_X/(3*a*Sb_X**2 + 2*b) #check this
+    Sb_XX = d*Sb_X/(3*a*Sb_X**2 + 2*b*Sb_X + c) #check this
     SXsurface = Sb + Sc*Ra*(Fr*C[6] + Fw*C[8])*Sb_X + Sc*Ra**2*C[7]*Sb_X**2
     SXbottom = Sb + Sc*Ra*(Fr*C[9] + Fw*C[11])*Sb_X + Sc*Ra**2*C[10]*Sb_X**2
     maskNonUnique = np.any(Sb[1:] <= Sb[:-1]) # 1 if there are local extrema (if there is non-monotonicity)
@@ -270,7 +270,7 @@ def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
     sigma = np.linspace(-1, 0, nsigma)
     _, sigmap = np.meshgrid(X,sigma)
 
-    _, _, _, P4, P5, P6, _ = formFunctions(sigmap, gp['BC'])
+    _, _, _, P4, P5, P6, _ = formFunctions(sigmap, gp['R'])
     SaccX = Sc*Ra*(Fr*P4 + Fw*P6)*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + Sc*Ra**2*P5*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
     #epsilon = .5
     #Choice 1: Integral rule
@@ -782,16 +782,6 @@ def plotDim3(PS, dimDict):
     ax.set_zlabel(names[2])
     ax.set_title('Dominant Terms')
     
-    '''
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    f4 = ax.scatter(sRa, sFr, sFw, c = PS.Sb_X0.ravel(), cmap = 'Blues') #np.log10(PS.Ls.ravel())
-    plt.colorbar(f4, ax = ax)
-    ax.set_xlabel('Ra')
-    ax.set_ylabel('Fr')
-    ax.set_zlabel('Fw')
-    ax.set_title(r'Salinity gradient $\bar{\Sigma}_{X0}$')
-    '''
     
 def plot3D(PS):
     sRa, sFr, sFw = np.log10(PS.Ra.ravel()), np.log10(PS.Fr.ravel()), symlog10(PS.Fw.ravel())
@@ -1115,39 +1105,29 @@ def addC(R):
         C[7] = -1/576 #P5(0)
         C[8] = -1/80 #P6(0)
         C[9] = 1/15 #P4(-1)
-        C[10] = 1/720 #P5(-1) #Check this
-        C[11] = 1/120 #P6(-1) #Check this
-    #Sc = 2.2
-    print(C)
+        C[10] = 1/720 #P5(-1)
+        C[11] = 1/120 #P6(-1) 
     return C
 
-def formFunctions(sigmap, BC):
-    if BC == 1:
-        P1 = 1/5-3/5*sigmap**2
-        P2 = 1/30 - 9/40*sigmap**2 - 1/6*sigmap**3
-        P3 = 3/10 + sigmap + 3/5*sigmap**2
-        P4 = -7/300 + sigmap**2/10 - sigmap**4/20
-        P5 = -23/7200 + 1/60*sigmap**2 - 3/160*sigmap**4 - 1/120*sigmap**5
-        P6 = -11/600 + 3/20*sigmap**2 + sigmap**3/6 + sigmap**4/20 
-        P7 = 1/30*sigmap - 3/40*sigmap**3 - 1/24*sigmap**4
+def formFunctions(sigmap, R):
+    if R != 'Inf':    
+        R3 = 1/(R+3)
+        P1 = R*R3*(1/2-3/2*sigmap**2)
+        P2 = 1/48*(R+6)*R3 - 3/16*R3*(R+4)*sigmap**2 - 1/6*sigmap**3
+        P3 = (R+4)*R3/4 + sigmap + 3*(R+2)*R3/4*sigmap**2
+        P4 = R*R3*(-7/120 + sigmap**2/4 - sigmap**4/8)
+        P5 = -(5*R+36)*R3/2880 + 1/96*R3*(R+6)*sigmap**2 - 1/64*(R+4)*R3*sigmap**4 - 1/120*sigmap**5
+        P6 = -1/240*R3*(3*R+16) + 1/8*R3*(R+4)*sigmap**2 + sigmap**3/6 + (R+2)*R3*sigmap**4/16
+        P7 = -1/48*(5*R+18)*R3 - 1/16*(R+4)*R3*sigmap**3 - 1/24*sigmap**4
         
-    if BC == 0:
-        P1 = 0*sigmap
-        P2 = -1/6*sigmap**3 + sigmap**2/4 - 1/8
-        P3 = sigmap**2/2 + sigmap + 1/3
-        P4 = 0*sigmap
-        P5 = -sigmap**5/120 + sigmap**4/48 - sigmap**2/16 + 11/720
-        P6 = sigmap**4/24 + sigmap**3/6 + sigmap**2/6 - 1/45
-        P7 = -1/8*sigmap - 1/24*sigmap**4 + 1/12*sigmap**3
-
-    if BC == -1:
+    else:
         P1 = -3/2*sigmap**2 + 1/2
         P2 = -sigmap**3/6 - 3/16*sigmap**2 + 1/48
         P3 = 3/4*sigmap**2 + sigmap + 1/4
         P4 = -1/8*sigmap**4 + sigmap**2/4 - 7/120
         P5 = -sigmap**5/120 - sigmap**4/64 + sigmap**2/96 - 1/576
         P6 = sigmap**4/16 + sigmap**3/6 + sigmap**2/8 - 1/80
-        P7 = 1/48*sigmap - 1/24*sigmap**4 - 1/16*sigmap**3
+        P7 = -5/48 - 1/24*sigmap**4 - 1/16*sigmap**3
     
     return P1, P2, P3, P4, P5, P6, P7
 

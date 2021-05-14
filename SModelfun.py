@@ -78,7 +78,7 @@ class SingleNonDim: #to do: Make dimensional model
         X = (3/2*a*Sb_X0**2*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
         Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
         Sb_X = Sb_X0*np.exp(r)
-        Sb_XX = Sb_X/(3*a*Sb_X**2 + 2*b)
+        Sb_XX = d*Sb_X/(3*a*Sb_X**2 + 2*b*Sb_X + c)
         self.X, self.Sb, self.Sb_X, self.Sb_XX, self.r, self.ra = X, Sb, Sb_X, Sb_XX, r, ra
         return
     
@@ -153,7 +153,7 @@ class SingleNonDim: #to do: Make dimensional model
 
     def processMC(self):
         nsigma = self.gp['SMGrid'][1]
-        Ra, Fr, Fw, Sc, BC, X = self.Ra, self.Fr, self.Fw, self.Sc, self.gp['BC'], self.X
+        Ra, Fr, Fw, Sc, R, X = self.Ra, self.Fr, self.Fw, self.Sc, self.gp['R'], self.X
         Sb, Sb_X, Sb_XX = self.Sb, self.Sb_X, self.Sb_XX
         C = self.gp['C']
         #nsigma = 31
@@ -161,7 +161,7 @@ class SingleNonDim: #to do: Make dimensional model
 
         Xp, sigmap = np.meshgrid(X,sigma)
 
-        P1, P2, P3, P4, P5, P6, P7 = formFunctions(sigmap, BC)
+        P1, P2, P3, P4, P5, P6, P7 = formFunctions(sigmap, R)
         
         Ubar = Fr*np.ones_like(sigmap)    
         UR = Fr*P1
@@ -175,8 +175,8 @@ class SingleNonDim: #to do: Make dimensional model
         self.U =  Ubar + UR + UG + UW
         self.Ubar, self.UR, self.UG, self.UW = Ubar, UR, UG, UW
         Re = 3000 #random
-        W = 0*P7 # Revisit this.
-        self.W = W/np.mean(abs(W))*np.mean(UG)
+        self.W = -P7*np.matlib.repmat(np.transpose(Sb_X),nsigma,1) # Revisit this.
+        #self.W = W/np.mean(abs(W))*np.mean(UG)
         self.sigma, self.Xp, self.sigmap = sigma, Xp, sigmap
         self.maskNU = np.any(Sb[1:] <= Sb[:-1]) # 1 if there are local extrema (if there is non-monotonicity)
         self.maskIS = np.any((self.S[0,:] < self.S[-1,:])) # 1 if there exists a point of unstable stratification

@@ -75,7 +75,7 @@ class ParameterSweep:
             Sb_X0[i], m[i] = solveCubic(np.array([a[i],b0[i],c0[i],-d[i]]))
         Sb_X0 = ma.masked_array(Sb_X0, mask = m)
         Sb_0 = (a*Sb_X0**3 + b*Sb_X0**2 + c*Sb_X0) / d
-        S_00 = 1 - self.Sc*self.Ra*Sb_X0*(self.Fr*C[6] + self.Ra*Sb_X0*C[7] + self.Fw*C[8])
+        S_00 = Sb_0 + self.Sc*self.Ra*Sb_X0*(self.Fr*C[6] + self.Ra*Sb_X0*C[7] + self.Fw*C[8])
         Phi_0 = 1 - S_00
         self.Sb_X0, self.Phi_0, self.Sb_0, self.maskNU0 = Sb_X0, Phi_0, Sb_0, m
         return
