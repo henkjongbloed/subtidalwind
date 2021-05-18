@@ -7,7 +7,7 @@ import matplotlib.colors as co
 #import matplotlib.colors as colors
 from scipy.interpolate import griddata
 from matplotlib.animation import FuncAnimation
-from GeneralModelFun import computePhysicalMasksPS, computeLsTheory, scaledIntegratedTransport, computeNU, computersXs, processBC, computeLocalExtremaVect, nonDim2ODECoeff, solveCubic, Int2, Int3, computeScore, computeRegime, computeMask
+from GeneralModelFun import computePhysicalMasksPS, computeLsTheory, scaledIntegratedTransport, computeNU, computersXs, processBC, computeLocalExtremaVect, nonDim2ODECoeff, solveCubic, computeRegime
 from matplotlib import ticker
 
 class ParameterSweep:

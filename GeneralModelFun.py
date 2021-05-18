@@ -13,7 +13,7 @@ import matplotlib.colors as co
 def globalParameters(**kwargs):
     gp = dict(R = 2, #R: real or Inf
         q = 1/30, #Salinity fraction at landward end
-        n = [1, 401, 25, 11], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
+        n = [1, 401, 51, 21], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
         SM = [1001,21], #Single model run: grid.
         PS = [51,11],
         tolNEG = 1,
@@ -27,7 +27,7 @@ def globalParameters(**kwargs):
             gp[key] = value
     return gp
 
-def solveCubic(r, opt = 'minusOne'):
+def solveCubic(r):
     '''Computes single real solution based on parameter values'''
     solC = np.roots(r)
     D3 = computeD3(r[0],r[1],r[2],r[3])
@@ -122,7 +122,7 @@ def makeDicts(gp, *args, **kwargs):
         
     #Default sweep ranges: Independent variables.
     Q = np.logspace(0,3,n)
-    H = np.logspace(0,2.1,n)
+    H = np.logspace(0,2.5,n)
     tau_w = np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
     
     # Make mixing dependent on H or tau_w, not the other way around!!
@@ -461,25 +461,6 @@ def increaseK_M(gp, mask0, Ra0, Fw0):
         
     return
 
-def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, rs, gp):
-    '''Compute relevant masks (after non-unique Sb_X0 and Xs have already been masked).'''
-    C = gp['C']
-    r = np.linspace(rs, 0, gp['PSGrid'][0])
-    X = (3/2*Sb_X0**2*a*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
-    Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
-    Sb_X = Sb_X0*np.exp(r)
-    Sb_XX = d*Sb_X/(3*a*Sb_X**2 + 2*b*Sb_X + c) #check this
-
-    maskNonUnique = np.any(Sb[1:] <= Sb[:-1]) # 1 if there are local extrema (if there is non-monotonicity)
-    maskUnStable = np.any((SXbottom - SXsurface < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
-    maskNegative = np.any((SXsurface < -gp['tolNEG'])) # 1 if there is negative salt
-    
-    _, _, _, P4, P5, P6, _ = formFunctions(sigmap, gp['R'])
-    SaccX = Sc*Ra*(Fr*P4 + Fw*P6)*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + Sc*Ra**2*P5*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
-    maxacc = np.amax(np.abs(SaccX),0)
-    maskPritchard = np.any((maxacc > gp['tolPrit']*Sb_X))
-    return bool(maskNonUnique), bool(maskUnStable), bool(maskNegative), bool(maskPritchard)
-
 #def computeScaling()
 
 def Int3(bl, bu, a, b, c):
@@ -543,13 +524,14 @@ def computeRegime(T):
     
 def computeLsTheory(gp,L,Sb_0):
     q = gp['q']
-    LsT = np.array([3/2*Sb_0**(2/3)*L[0]*(1-q**2/3)/L[7],
+    LsT = np.array([3/2*Sb_0**(2/3)*L[0]**(1/3)/L[7]**(1/3)*(1-q**2/3),
                 2*np.sqrt(L[1])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7], 
                 2*np.sqrt(L[2])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7],
                 -L[3]/L[7]*np.log(Sb_0*q),
                 -L[4]/L[7]*np.log(Sb_0*q),
                 -L[5]/L[7]*np.log(Sb_0*q),
-                -L[6]/L[7]*np.log(Sb_0*q)])
+                -L[6]/L[7]*np.log(Sb_0*q)]
+        )
     return LsT
     
 def symlog10(x,l = 1/10000/np.log(10)):
@@ -815,42 +797,37 @@ def plotDim1(PS, dimDict):
     plt.tight_layout()
 
     Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
-    varx = np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5])
-    #varx = PS.dimDict[namex]
-    Reg = Reg[0:3,:]
-    temp=np.array([Reg, Reg])
-    Regcolor = np.moveaxis(temp,(2,0,1), (1,0,2))
     
-    #Regcolor = np.ma.masked_array(Regcolor, mask = tm)
-    #if namex == 'tau_w':
-        #varx = invsymlog10(varx)
-    #Regcolor2 = np.expand_dims(Regcolor, 3)
-    #Regcolor2[:,:,:,3]
+    if namex == 'tau_w':
+        varx = symlog10(np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5]))
+    else:
+        varx = np.log10(np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5]))
 
-    yt = np.array([np.amin(Phi_0), np.amax(Phi_0)])
-    x, y = np.meshgrid(varx, yt, indexing = 'ij')
+    Regcolor = np.array([Reg, Reg])
+    extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
+    Ll, Lu = 1/2*np.amin(Ls), 2*np.amax(Ls)
+    extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
     #x, y = x.ravel(), y.ravel()
     axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
     axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
-    f1 = axs[0].imshow(Regcolor, extent = (np.amin(x), np.amax(x), np.amin(y), np.amax(y)), origin = 'upper', aspect = 'auto')
+    f1 = axs[0].imshow(Regcolor, extent = extentp, origin = 'upper', aspect = 'auto')
+    
     #cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
     
     
-    yt = np.array([np.amin(Ls), np.amax(Ls)])
-    x, y = np.meshgrid(varx, yt, indexing = 'ij')
     axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
     axs[1].title.set_text(r'Salt intrusion $L_s$')
-    f2 = axs[1].imshow(Regcolor, extent = (np.amin(x), np.amax(x), np.amin(y), np.amax(y)), origin = 'upper', aspect = 'auto')
+    f2 = axs[1].imshow(Regcolor, extent = extentl, origin = 'upper', aspect = 'auto')
     #cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
     
     LD = np.ma.masked_array(LsT[:,6], mask = PS.mask[:,5])
-    LD = np.ma.masked_outside(LD, yt[0], yt[1])
+    LD = np.ma.masked_outside(LD, Ll, Lu)
     
     LGG = np.ma.masked_array(LsT[:,0], mask = PS.mask[:,5])
-    LGG = np.ma.masked_outside(LGG, yt[0], yt[1])
+    LGG = np.ma.masked_outside(LGG, Ll, Lu)
     
     LWW = np.ma.masked_array(LsT[:,5], mask = PS.mask[:,5])
-    LWW = np.ma.masked_outside(LWW, yt[0], yt[1])
+    LWW = np.ma.masked_outside(LWW, Ll, Lu)
     
     axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
     axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
@@ -869,12 +846,10 @@ def plotDim1(PS, dimDict):
     axs[2].title.set_text('Transports')
     
     for i in range(3):
-        if namex == 'H':
-            axs[i].set_xscale('log')
-        elif namex == 'tau_w':
-            axs[i].set_xscale('symlog')
+        if namex == 'tau_w':
+            axs[i].set_xscale('linear')
         else:
-            axs[i].set_xscale('log')
+            axs[i].set_xscale('linear')
         axs[i].set_xlabel(namex)
         #axs[i].grid(True)
 
@@ -885,17 +860,22 @@ def plotDim2(PS, dimDict):
     fig, axs = plt.subplots(3,1)
     #fig.suptitle('Sensitivity: Wind and Depth')
     #Ra, Fr, Fw, 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
-    varx = dimDict[namex]
-    vary = dimDict[namey]
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0.reshape(PS.nps)), np.abs(np.squeeze(PS.Xs).reshape(PS.nps)), np.squeeze(PS.Reg)
+    nps = PS.nps
+    if namex == 'tau_w':
+        varx = symlog10(dimDict[namex].reshape(PS.nps))
+    else:
+        varx = np.log10(dimDict[namex].reshape(PS.nps))
+    Regcolor = np.reshape(Reg, (*nps, 3))
+    
+    vary = np.log10(dimDict[namey].reshape(PS.nps))
     plt.tight_layout()
-    cfig = axs[0].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Reg, 20, cmap = plt.get_cmap('plasma'))
-    axs[0].contour(cfig, levels = np.linspace(.5, 4.5), colors = 'k', linewidths = 0.5)
-    #axs[0,2].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    #axs[0,2].contourf(Ra, Fr, Reg, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
-    #axs[0,2].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
+    
+    axs[0].imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'upper', aspect = 'auto')
     axs[0].title.set_text('Regime')
-    cb = plt.colorbar(cfig, ax = axs[0], ticks = [1 ,2, 3, 4])
+    plt.xticks([-6,-5,-4,-3,-2,-1,0,1,2,3,4,5], ['$10^{-6}$', '$10^{-5}$', '$10^{-4}$', '$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$', '$10$', '$10^2$', '$10^3$', '$10^4$', '$10^5$'])
+    plt.yticks([-3,-2,-1,0], ['$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
+    #cb = plt.colorbar(cfig, ax = axs[0], ticks = [1 ,2, 3, 4])
     #cb.ax.set_yticklabels(['1', '2', '3', '4'])
     #cb = plt.colorbar(cfig, ax = axs[0,2])
     #cb.ax.set_yticklabels(['1', '2', '3', '4'])    
@@ -903,10 +883,10 @@ def plotDim2(PS, dimDict):
     hl = [np.min([np.amin(Phi_0),0]), np.max([np.amin(Phi_0),0]), np.min([np.amax(Phi_0),1]), np.max([np.amax(Phi_0),1])]
     hl.sort()
     minz, maxz = np.min(Phi_0), np.max(Phi_0)
-    cfig = axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
+    cfig = axs[1].contourf(varx, vary, Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
     axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
     axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
+    #axs[1].contourf(varx, vary, Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
     #axs[1].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[1].title.set_text(r'Stratification $\Phi_0$')
     plt.colorbar(cfig, ax = axs[1])
@@ -915,27 +895,22 @@ def plotDim2(PS, dimDict):
     #print(np.amin(Ls))
     #cfig2 = axs[2,2].contourf(Ra, Fr, Ls, 20, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
     cfig2 = axs[2].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Ls, 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
-    axs[2].contour(cfig2,  levels = np.geomspace(minz,maxz), colors = 'k', linewidths = 0.5)
-    axs[2].contour(cfig2, levels = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000], colors='k', linewidths = 1)     
+    #axs[2].contour(cfig2,  levels = np.geomspace(minz,maxz), colors = 'k', linewidths = 0.5)
+    #axs[2].contour(cfig2, levels = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000], colors='k', linewidths = 1)     
     axs[2].title.set_text(r'Salt intrusion $L_s$')
     plt.colorbar(cfig2, ax = axs[2])
     
     for i in range(3):
         if namex == 'tau_w':
             axs[i].set_xscale('symlog')
-            axs[i].set_xlabel(r'$\tau_w$')
             axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
         else:
-            axs[i].set_xscale('log')
             axs[i].set_xlabel(namex)
             
         if namey == 'tau_w':
-            axs[i].set_yscale('symlog')
             axs[i].set_ylabel(r'$\tau_w$')
         else:
-            axs[i].set_yscale('log')
             axs[i].set_ylabel(namey) 
-
 
 def plotDim3(PS, dimDict):
     names = dimDict['pars'] #tuple of variables that were varied.
