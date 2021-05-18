@@ -1,4 +1,6 @@
 import numpy as np
+from numpy.linalg.linalg import qr
+from numpy.ma.extras import masked_all
 import numpy.matlib
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
@@ -9,15 +11,16 @@ import matplotlib.colors as co
 
 
 def globalParameters(**kwargs):
-    gp = dict(R = 'Inf', #R: real or Inf
-        alpha = 1/30, #Salinity fraction at landward end
+    gp = dict(R = 2, #R: real or Inf
+        q = 1/30, #Salinity fraction at landward end
         n = [1, 401, 25, 11], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
-        SMGrid = [1001,21], #Single model run: grid.
-        PSGrid = [51,11],
+        SM = [1001,21], #Single model run: grid.
+        PS = [51,11],
         tolNEG = 1,
         tolUN = 10,
         tolPrit = 10,
-        Sc = 2.2
+        Sc = 2.2,
+        m = 2.0 #tuning factor for mixing algorithm
         )
     gp['C'] = addC(gp['R'])
     for key, value in kwargs.items(): #Change the constant parameters
@@ -28,21 +31,12 @@ def solveCubic(r, opt = 'minusOne'):
     '''Computes single real solution based on parameter values'''
     solC = np.roots(r)
     D3 = computeD3(r[0],r[1],r[2],r[3])
-    maskNU = (D3>=0)
-    if ~maskNU: #one real solution
+    mask = (D3 >= 0)
+    if ~mask: #one real solution
         sol = float(np.real(solC[np.isreal(solC)]))
-    if maskNU: #two or three real solutions
-        #maskNU0 = True
-        if opt == 'minusOne':
-            sol = -1
-        elif opt == 'max':
-            sol = np.amax(solC)
-        elif opt == 'min':
-            sol = np.amin(solC)
-        elif opt == 'middle':
-            solS = np.sort(solC)
-            sol = solS[1]
-    return sol, maskNU
+        return sol, mask
+    else:
+        return mask, mask
 
 def computeD3(a,b,c,d):
     D3 = b**2*c**2 - 4*a*c**3 - 4*b**3*d - 27*a**2*d**2 + 18*a*b*c*d
@@ -64,7 +58,7 @@ def computeLocalExtrema(a,b,c,d):
         yright = a*xright**3 + b*xright**2 + c*xright + d#y where first derivative is zero
         yleft = a*xleft**3 + b*xleft**2 + c*xleft + d#y where first derivative is zero
     #xright, xleft, yright, yleft = bpx, bpx, bpy, bpy
-    return D2, [xright,xleft,bpx], [yright,yleft,bpy]
+    return D2, np.array([bpx, xright, xleft]), np.array([bpy, yright, yleft])
 
 def computeLocalExtremaVect(a,b,c,d):
     '''Returns the discriminant and local extrema of the S - S_X curve'''
@@ -72,12 +66,11 @@ def computeLocalExtremaVect(a,b,c,d):
     bpx = -b/(3*a) #x where second derivative is zero
     bpy = a*bpx**3 + b*bpx**2 + c*bpx + d #y where second derivative is zero
     xright, xleft, yright, yleft = bpx, bpx, bpy, bpy #no local extrema
-    xright[D2>=0] = (-2*b[D2>=0] + np.sqrt(D2[D2>=0]))/(6*a)#x where first derivative is zero
-    xleft[D2>=0] = (-2*b[D2>=0] - np.sqrt(D2[D2>=0]))/(6*a)#x where first derivative is zero
-    yright[D2>=0] = a*xright[D2>=0]**3 + b[D2>=0]*xright[D2>=0]**2 + c[D2>=0]*xright[D2>=0] + d#y where first derivative is zero
-    yleft[D2>=0] = a*xleft[D2>=0]**3 + b[D2>=0]*xleft[D2>=0]**2 + c[D2>=0]*xleft[D2>=0] + d#y where first derivative is zero
-    #xright, xleft, yright, yleft = bpx, bpx, bpy, bpy
-    return D2, [xright,xleft,bpx], [yright,yleft,bpy]
+    xright[D2>=0] = (-2*b[D2>=0] + np.sqrt(D2[D2>=0]))/(6*a[D2>=0])#x where first derivative is zero
+    xleft[D2>=0] = (-2*b[D2>=0] - np.sqrt(D2[D2>=0]))/(6*a[D2>=0])#x where first derivative is zero
+    yright[D2>=0] = a[D2>=0]*xright[D2>=0]**3 + b[D2>=0]*xright[D2>=0]**2 + c[D2>=0]*xright[D2>=0] + d[D2>=0]#y where first derivative is zero
+    yleft[D2>=0] = a[D2>=0]*xleft[D2>=0]**3 + b[D2>=0]*xleft[D2>=0]**2 + c[D2>=0]*xleft[D2>=0] + d[D2>=0]#y where first derivative is zero
+    return D2, np.transpose(np.array([bpx, xright, xleft])), np.transpose(np.array([bpy, yright, yleft]))
 
 def dim2nondim(dimDict):
     Q, H, K_M, tau_w, K_H = dimDict['Q'], dimDict['H'], dimDict['K_M'], dimDict['tau_w'], dimDict['K_H']
@@ -94,15 +87,18 @@ def dim2nondim(dimDict):
     nondimDict = dict(Ra = Ra, Fr = Fr, Fw = Fw, Sc = dimDict['Sc'])
     return nondimDict
 
-def makeDicts(gp, *args, **kwargs):
-    #First default values by Dijkstra and Schuttelaars (2021)
+def defaultDim(gp):
     dd = dict(Q = 1000, 
         H = 20,  
         K_M = 1e-3, 
         tau_w = 0,
         K_H = 250, 
-        s_0 = 30.0, g = 9.81, beta = 7.6e-4, rho_0 = 1000.0, B = 1000.0, Sc = gp['Sc']
-        )
+        s_0 = 30.0, g = 9.81, beta = 7.6e-4, rho_0 = 1000.0, B = 1000.0, Sc = gp['Sc'])
+    return dd
+
+def makeDicts(gp, *args, **kwargs):
+    #First default values by Dijkstra and Schuttelaars (2021)
+    dd = defaultDim(gp)
     
     for key, value in kwargs.items(): #Change the constant parameters
         if key not in ['Ralston', 'Sverdrup']:
@@ -126,7 +122,7 @@ def makeDicts(gp, *args, **kwargs):
         
     #Default sweep ranges: Independent variables.
     Q = np.logspace(0,3,n)
-    H = np.logspace(0,3,n)
+    H = np.logspace(0,2.1,n)
     tau_w = np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
     
     # Make mixing dependent on H or tau_w, not the other way around!!
@@ -176,16 +172,16 @@ def makeDicts(gp, *args, **kwargs):
     #ndd = dim2nondim(dd)
     dd['pars'] = args
     ndd['pars'] = args
+    if len(ndd['pars']) > 1:
+        n = np.prod(ndd['nps'])
+    else:
+        n = ndd['nps']
+    ndd['Ra'], ndd['Fr'], ndd['Fw'] = ndd['Ra']*np.ones(n), ndd['Fr']*np.ones(n), ndd['Fw']*np.ones(n) #Make sure everything is the same size.
+    ndd['n'] = n
     return dd, ndd
 
 def makeNDDict(gp, *args, **kwargs):
-    dd = dict(Q = 1000, 
-        H = 20,  
-        K_M = 1e-3, 
-        tau_w = 0,
-        K_H = 250, 
-        s_0 = 30.0, g = 9.81, beta = 7.6e-4, rho_0 = 1000.0, B = 1000.0, Sc = 2.2
-        )
+    dd = defaultDim(gp)
     ndd = dim2nondim(dd) #Default, also for nonDim model run.
     
     for key, value in kwargs.items(): #Change the constant parameters
@@ -235,12 +231,19 @@ def makeNDDict(gp, *args, **kwargs):
         ndd[args[2]] = varz
         ndd['nps'] = [n, n, n]
 
-    #ndd = dim2nondim(dd)
+    #ndd = dim2nondim(dd)s
     ndd['pars'] = args
     ndd['Sc'] = gp['Sc']
 
     #Ra, Fr, Fw = np.meshgrid(Ra1, Fr1, Fw1, indexing='ij')
     #nondimDict = dict(Ra = Ra.flatten(),Fr = Fr.flatten(), Fw = Fw.flatten(), Sc = dd['Sc'], nps = nps)
+    
+    if len(ndd['pars']) > 1:
+        n = np.prod(ndd['nps'])
+    else:
+        n = ndd['nps']
+    ndd['Ra'], ndd['Fr'], ndd['Fw'] = ndd['Ra']*np.ones(n), ndd['Fr']*np.ones(n), ndd['Fw']*np.ones(n) #Make sure everything is the same size.
+    ndd['n'] = n
     return ndd
 
 def Ralston(u_T, H, B):
@@ -252,31 +255,227 @@ def Sverdrup(tau_w, K_M0, beta):
     K_M = K_M0 + beta*np.abs(tau_w)
     return K_M
 
-def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, ra, gp):
-    '''Compute relevant masks (after non-unique Sb_X0 and Xa have already been masked). Notice that the Dijkstra slip condition is used.'''
+def computersXs(gp, a, b, c, d, Sb_X0):
+    '''
+    
+    Computes rs and Xs (salt intrusion coordinates)
+    
+    Input: ODE data
+    
+    Output: rs (float), Xs (float), mask (bool)
+    
+    '''
+    q = gp['q']
+    expr, mask = solveCubic(np.array([a*Sb_X0**2, b*Sb_X0, c, -q*(a*Sb_X0**2 + b*Sb_X0 + c)])) #rt = exp(r)
+    if (expr < 1.0) and ~mask:
+        rs = np.log(expr)
+        Xs = (3/2*a*Sb_X0**2*(np.exp(2*rs)-1) + 2*b*Sb_X0*(np.exp(rs)-1) + c*rs)/d
+    else:
+        mask = True
+        return mask, mask, mask
+    return rs, Xs, mask
+
+def scaledTransport(L, Sb, Sb_X):
+    ''' Computes scaled (divided by d*Sigma) transport.
+    
+    Input: ODE and salt profiles
+    
+    Output: TX (List of size 8 consisting of numpy arrays of shape Grid[0])
+    
+    '''
+    P = [Sb_X**3/Sb,    #GG
+        Sb_X**2/Sb,     #GR
+        Sb_X**2/Sb,     #GW
+        Sb_X/Sb,#RR
+        Sb_X/Sb,#RW
+        Sb_X/Sb,#WW
+        Sb_X/Sb,#D
+        Sb/Sb#F
+        ] #For numerical integration.
+    
+    TX = [l*p/L[7] for l,p in zip(L, P)] #transports as function of X, scaled by the river lengtscale (Fr)
+    return TX
+
+def scaledIntegratedTransport(gp, L, a, b, c, Sb_X0, rs, Xs):
+    ''' Computes integrated (Xs to 0), divided by abs(Xs) and scaled (divided by d*Sigma) transport.
+    
+    Input: ODE and salt intrusion data
+    
+    Output: T (numpy array of shape 8)
+    
+    '''
+    q = gp['q']
+    
+    bl, bu = Sb_X0*np.exp(rs), Sb_X0
+    
+    sT = [Int3(bl, bu, a, b, c), #Analytically integrated P
+            Int2(bl, bu, a, b, c),
+            Int2(bl, bu, a, b, c),
+            -np.log(q), #L[0] is just a dummy variable, no length
+            -np.log(q),
+            -np.log(q),
+            -np.log(q),
+            -Xs
+            ]
+    
+    T = np.array([l*st/(-Xs*L[7]) for l, st in zip(L, sT)]) #analytical integration, scaled
+    return T
+
+def solveODE(gp, a, b, c, d, Sb_X0, rs):
+    '''
+    
+    Solves the qubic ODE.
+    
+    Output: r, X, Sb, Sb_X, Sb_XX (all numpy vectors)
+    
+    '''
+    #C = gp['C']
+    r = np.linspace(rs, 0, gp[gp['Class']][0])
+    X = (3/2*Sb_X0**2*a*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
+    Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
+    Sb_X = Sb_X0*np.exp(r)
+    Sb_XX = d*Sb_X/(3*a*Sb_X**2 + 2*b*Sb_X + c)
+    return r, X, Sb, Sb_X, Sb_XX
+
+def nonDim2ODECoeff(gp, Ra, Fr, Fw, Sc):
+    '''Input: Nondimensional Parameters
+    
+    Output: Length scales, ODE factors, mouth factors. (np arrays, same dim as input parameters)
+    '''
     C = gp['C']
-    r = np.linspace(ra, 0, gp['PSGrid'][0])
+    L = np.transpose(np.array([C[0]*Sc*Ra**3,                     #GG cubed
+        C[1]*Sc*Ra**2*Fr,                   #GR squared
+        C[2]*Sc*Ra**2*Fw,                   #GW squared
+        C[3]*Sc*Ra*Fr**2,                   #RR
+        C[4]*Sc*Ra*Fr*Fw,                   #RW
+        C[5]*Sc*Ra*Fw**2,                   #WW
+        np.ones_like(Ra),                                #D
+        Fr]))                             #F
+    
+    if gp['Class'] == 'PS':
+        a = L[:,0]
+        b = L[:,1] + L[:,2]
+        c = L[:,3] + L[:,4] + L[:,5] + L[:,6]
+        d = L[:,7]
+    else:
+        a = L[0]
+        b = L[1] + L[2]
+        c = L[3] + L[4] + L[5] + L[6]
+        d = L[7]
+        
+    b0 = b + d*Sc*Ra**2*C[10]
+    c0 = c + d*Sc*Ra*(Fr*C[9] + Fw*C[11])
+    return L, a, b, c, d, b0, c0
+
+def processBC(gp, Sb_X0, a, b, c, d, Ra, Fr, Fw, Sc):
+    C = gp['C']
+    Sb_0 = (a*Sb_X0**3 + b*Sb_X0**2 + c*Sb_X0) / d
+    S_00 = Sb_0 + Sc*Ra*Sb_X0*(Fr*C[6] + Ra*Sb_X0*C[7] + Fw*C[8])
+    Phi_0 = 1 - S_00
+    return Sb_0, Phi_0
+
+def getGrid(gp, X):
+    '''
+    Computes meshgrid of X and sigma
+    
+    Input: gp and GridDim (either 'SMGrid' or 'PsGrid')
+    
+    Output: Xp, sigmap (2d arrays of dimension GridDim) and sigma (1d array of dimension GridDim[1])
+    '''
+    
+    sigma = np.linspace(-1,0,gp[gp['Class']][1])
+    Xp, sigmap = np.meshgrid(X,sigma)
+    SF = formFunctions(sigmap, gp['R'])
+    return Xp, sigmap, sigma, SF
+
+def computeS(gp, Ra, Fr, Fw, Sc, P, Sb, Sb_X, Sb_XX):
+    '''
+    Input: Avg salinity, derivatives and other parameters. 
+    
+    Output: S, S_X, Sbar, Sacc, Sbar_X, Sacc_X
+    
+    '''
+    nsigma = gp[gp['Class']][1]
+    Sbar, Sbar_X = np.matlib.repmat(np.transpose(Sb),nsigma,1), np.matlib.repmat(np.transpose(Sb_X),nsigma,1)
+    Sacc, Sacc_X = Sc*Ra*(Fr*P[3] + Fw*P[5])*np.matlib.repmat(np.transpose(Sb_X),nsigma,1) + Sc*Ra**2*P[4]*np.matlib.repmat(np.transpose(Sb_X),nsigma,1)**2, Sc*Ra*(Fr*P[3] + Fw*P[5])*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + Sc*Ra**2*P[4]*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
+    S =  Sbar + Sacc
+    S_X =  Sbar_X, Sacc_X
+    return S, S_X, Sbar, Sacc, Sbar_X, Sacc_X
+
+def computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X):
+    '''Input: Avg salinity, derivatives and other parameters. Output: S_surface and S_bottom and components.'''
+    C = gp['C']
+    Ssurf = Sb + Sc*Ra*(Fr*C[6] + Fw*C[8])*Sb_X + Sc*Ra**2*C[7]*Sb_X**2
+    Sbot = Sb + Sc*Ra*(Fr*C[9] + Fw*C[11])*Sb_X + Sc*Ra**2*C[10]*Sb_X**2
+    return Ssurf, Sbot
+
+def computeU(gp, Ra, Fr, Fw, P, Sb_X, Sb_XX):
+    '''
+    Input: Avg salinity gradient and other parameters
+    
+    Output: U, W, UR, UG, UW (all numpy arrays)
+    
+    '''
+    nsigma = gp[gp['Class']][1]
+    Ubar = Fr*np.ones_like(P[0])    
+    UR = Fr*P[0]
+    UG = Ra*P[1]*np.matlib.repmat(np.transpose(Sb_X),nsigma,1)
+    UW = Fw*P[2]   
+    #temp = np.transpose(Sb)# np.matlib.repmat(np.transpose(Sb),nsigma,1) -> Start here!!!!
+    #print(temp)
+    U =  Ubar + UR + UG + UW
+    W = -P[6]*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) # In this, we have scaled with K_M/c * Ra**2
+    return U, W, Ubar, UR, UG, UW
+
+def computeNU(gp, D2, Exx, a, b, c, d, Sb_X0, Sb_0):
+    maskNU = False
+    if D2 >=0:
+        Sb_Xs, _ = solveCubic(np.array([a, b, c, -d*gp['q']*Sb_0]))
+        if (Sb_Xs <= Exx[0] <= Sb_X0) or (Sb_Xs <= Exx[1] <= Sb_X0):
+            maskNU = True
+    return maskNU
+
+def computePhysicalMasks(gp, Ra, Fr, Fw, Sc, Sb, Sb_X):
+    Ssurf, Sbot = computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X)
+    maskNEG = np.any((Ssurf < -gp['tolNEG'])) # 1 if there is negative salt
+    maskUN = np.any((Sbot - Ssurf < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
+    return maskNEG, maskUN
+
+def computePhysicalMasksPS(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, rs):
+    _,_, Sb, Sb_X, _ = solveODE(gp, a, b, c, d, Sb_X0, rs)
+    Ssurf, Sbot = computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X)
+    maskNEG = np.any((Ssurf < -gp['tolNEG'])) # 1 if there is negative salt
+    maskUN = np.any((Sbot - Ssurf < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
+    return maskNEG, maskUN
+
+
+def increaseK_M(gp, mask0, Ra0, Fw0):
+    '''
+    Increases K_M in case any mask equals 1. This is equivalent to decreasing Ra and Fw by the same factor.
+    '''
+    m = gp['m']
+    mask = np.copy(mask0)
+    
+    while np.any(mask):
+        Ra, Fw = Ra0/m, Fw0/m
+        
+    return
+
+def computeMask(a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, rs, gp):
+    '''Compute relevant masks (after non-unique Sb_X0 and Xs have already been masked).'''
+    C = gp['C']
+    r = np.linspace(rs, 0, gp['PSGrid'][0])
     X = (3/2*Sb_X0**2*a*(np.exp(2*r)-1) + 2*b*Sb_X0*(np.exp(r)-1) + c*r)/d
     Sb = (a*Sb_X0**3*np.exp(3*r) + b*Sb_X0**2*np.exp(2*r) + c*Sb_X0*np.exp(r))/d
     Sb_X = Sb_X0*np.exp(r)
     Sb_XX = d*Sb_X/(3*a*Sb_X**2 + 2*b*Sb_X + c) #check this
-    SXsurface = Sb + Sc*Ra*(Fr*C[6] + Fw*C[8])*Sb_X + Sc*Ra**2*C[7]*Sb_X**2
-    SXbottom = Sb + Sc*Ra*(Fr*C[9] + Fw*C[11])*Sb_X + Sc*Ra**2*C[10]*Sb_X**2
+
     maskNonUnique = np.any(Sb[1:] <= Sb[:-1]) # 1 if there are local extrema (if there is non-monotonicity)
     maskUnStable = np.any((SXbottom - SXsurface < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
     maskNegative = np.any((SXsurface < -gp['tolNEG'])) # 1 if there is negative salt
     
-    nsigma = gp['PSGrid'][1]
-    sigma = np.linspace(-1, 0, nsigma)
-    _, sigmap = np.meshgrid(X,sigma)
-
     _, _, _, P4, P5, P6, _ = formFunctions(sigmap, gp['R'])
     SaccX = Sc*Ra*(Fr*P4 + Fw*P6)*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) + Sc*Ra**2*P5*np.matlib.repmat(np.transpose(2*Sb_X*Sb_XX),nsigma,1)
-    #epsilon = .5
-    #Choice 1: Integral rule
-    #trapacc = 1/(nsigma-1)*(np.sum(np.abs(SaccX[1:-1,:]),0) + (np.abs(SaccX[0,:]) + np.abs(SaccX[-1,:]))/2) #trapezoidal rule
-    #maskPritchard = np.any((trapacc > epsilon*Sb_X))
-    #Choice 2: Max rule
     maxacc = np.amax(np.abs(SaccX),0)
     maskPritchard = np.any((maxacc > gp['tolPrit']*Sb_X))
     return bool(maskNonUnique), bool(maskUnStable), bool(maskNegative), bool(maskPritchard)
@@ -320,35 +519,38 @@ def I3(x, a, b, c):
     I = x**2/(2*a) - b*x/a**2 + (b**2-a*c)/(2*a**3)*np.log(np.abs(a*x**2 + b*x + c)) - b*(b**2 - 3*a*c)/(2*a**3)*I0(x,a,b,c)
     return I
 
-def scoreIJ(TT):
-    s1 = TT[0]/TT[6]
-    s1 = 0.1 if s1 < 0.1 else s1
-    s1 = 10 if s1 > 10 else s1
-    if TT[2] > 0:
-        s2 = (TT[4] + TT[2] + TT[5])/(TT[0]+TT[6])
-        s2 = 0.1 if s2 < 0.1 else s2
-        s2 = 10 if s2 > 10 else s2
-    else:
-        s2 = 0
-    if TT[2] < 0: #up-estuary wind: import of salt
-        s3 = (np.abs(TT[2])+np.abs(TT[4])+ np.abs(TT[5]))/(TT[0]+TT[6])
-        s3 = 0.1 if s3 < 0.1 else s3
-        s3 = 10 if s3 > 10 else s3
-    else: #
-        s3 = 0
-    maxT = np.argmax(np.abs(TT[0:7]))
-    return np.array([s1,s2,s3,maxT])
+def computeScore(T):
+    '''
+    Computes scores of Regime 1 (Dispersive), Regime 2 (Chatwin) and 2 (Wind-Driven)
+    '''
+    s = np.array([T[6], T[0]+T[1]+T[3], abs(T[2]) + abs(T[4]) + abs(T[5])])/np.sum(np.abs(T[0:7]))
+    #maxT = np.argmax(np.abs(T[0:7]))
+    #alpha = 1.0 - np.sum(s[~np.argmax(s)])
+    return s
 
-def computeRegime(s):
-    if s[2]>.1:
-        r = 3 + np.log10(s[2])/2 + 1/2
-    elif s[1]>.1:
-        r = 2 + np.log10(s[1])/2 + 1/2
-    elif s[0]>.1:
-        r = 1 + np.log10(s[0])/2 + 1/2
-    else:
-        r = np.array([1.0])
-    return np.array([r])
+def computeRegime(T):
+    '''
+    
+    Input: Integrated transport vector
+    
+    Output: RBG regime vector.
+    
+    '''
+    s = computeScore(T)
+    regMat = np.array([[1,0,0], [0,1,0], [0,0,1]])
+    r = np.matmul(regMat,s)
+    return r
+    
+def computeLsTheory(gp,L,Sb_0):
+    q = gp['q']
+    LsT = np.array([3/2*Sb_0**(2/3)*L[0]*(1-q**2/3)/L[7],
+                2*np.sqrt(L[1])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7], 
+                2*np.sqrt(L[2])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7],
+                -L[3]/L[7]*np.log(Sb_0*q),
+                -L[4]/L[7]*np.log(Sb_0*q),
+                -L[5]/L[7]*np.log(Sb_0*q),
+                -L[6]/L[7]*np.log(Sb_0*q)])
+    return LsT
     
 def symlog10(x,l = 1/10000/np.log(10)):
     return np.sign(x)*np.log10(1.0 + np.abs(x/l))
@@ -443,7 +645,7 @@ def plotNDim1(PS):
     #fig.suptitle('Se)
     plt.tight_layout()
 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     varx = np.ma.masked_array(ndd[namex], mask = PS.totMask)
     #varx = PS.dimDict[namex]
     Regcolor = np.transpose(np.array([Reg, Reg]))
@@ -457,7 +659,7 @@ def plotNDim1(PS):
     #x, y = x.ravel(), y.ravel()
     axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
     axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
-    f1 = axs[0].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), alpha = 1)
+    f1 = axs[0].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), l = 1)
     cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
     
     
@@ -465,7 +667,7 @@ def plotNDim1(PS):
     x, y = np.meshgrid(varx, yt, indexing = 'ij')
     axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
     axs[1].title.set_text(r'Salt intrusion $L_s$')
-    f2 = axs[1].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), alpha = 1)
+    f2 = axs[1].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), l = 1)
     cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
     
     LD = np.ma.masked_array(LSReg[6], mask = PS.totMask)
@@ -508,7 +710,7 @@ def plotNDim2(PS):
     fig, axs = plt.subplots(3,1)
     #fig.suptitle('Sensitivity: Wind and Depth')
     #Ra, Fr, Fw, 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     varx = ndd[namex]
     vary = ndd[namey]
     plt.tight_layout()
@@ -523,7 +725,7 @@ def plotNDim2(PS):
     cfig = axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
     axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
     axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     #axs[1].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[1].title.set_text(r'Stratification $\Phi_0$')
     plt.colorbar(cfig, ax = axs[1])
@@ -602,63 +804,67 @@ def plotDim1(PS, dimDict):
     col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
     labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
     namex = dimDict['pars'][0]
-    tm = np.transpose(np.array([PS.totMask, PS.totMask], dtype = bool))
+    tm = np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]], dtype = bool))
     # Prepare background color for plots
     
     #Reg = ma.masked_array(Reg, mask = tm)
     
-    LSReg = PS.LSReg
+    LsT = PS.LsT
     fig, axs = plt.subplots(3,1)
     #fig.suptitle('Se)
     plt.tight_layout()
 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
-    varx = np.ma.masked_array(dimDict[namex], mask = PS.totMask)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
+    varx = np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5])
     #varx = PS.dimDict[namex]
-    Regcolor = np.transpose(np.array([Reg, Reg]))
-    Regcolor = np.ma.masked_array(Regcolor, mask = tm)
+    Reg = Reg[0:3,:]
+    temp=np.array([Reg, Reg])
+    Regcolor = np.moveaxis(temp,(2,0,1), (1,0,2))
+    
+    #Regcolor = np.ma.masked_array(Regcolor, mask = tm)
     #if namex == 'tau_w':
         #varx = invsymlog10(varx)
-    
+    #Regcolor2 = np.expand_dims(Regcolor, 3)
+    #Regcolor2[:,:,:,3]
 
     yt = np.array([np.amin(Phi_0), np.amax(Phi_0)])
     x, y = np.meshgrid(varx, yt, indexing = 'ij')
     #x, y = x.ravel(), y.ravel()
     axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
     axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
-    f1 = axs[0].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), alpha = 1)
-    cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
+    f1 = axs[0].imshow(Regcolor, extent = (np.amin(x), np.amax(x), np.amin(y), np.amax(y)), origin = 'upper', aspect = 'auto')
+    #cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
     
     
-    yt = np.array([np.amin(Ls)/3, np.amax(Ls)*3])
+    yt = np.array([np.amin(Ls), np.amax(Ls)])
     x, y = np.meshgrid(varx, yt, indexing = 'ij')
     axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
     axs[1].title.set_text(r'Salt intrusion $L_s$')
-    f2 = axs[1].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), alpha = 1)
-    cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
+    f2 = axs[1].imshow(Regcolor, extent = (np.amin(x), np.amax(x), np.amin(y), np.amax(y)), origin = 'upper', aspect = 'auto')
+    #cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
     
-    LD = np.ma.masked_array(LSReg[6], mask = PS.totMask)
+    LD = np.ma.masked_array(LsT[:,6], mask = PS.mask[:,5])
     LD = np.ma.masked_outside(LD, yt[0], yt[1])
     
-    LGG = np.ma.masked_array(LSReg[0], mask = PS.totMask)
+    LGG = np.ma.masked_array(LsT[:,0], mask = PS.mask[:,5])
     LGG = np.ma.masked_outside(LGG, yt[0], yt[1])
     
-    LWW = np.ma.masked_array(LSReg[5], mask = PS.totMask)
+    LWW = np.ma.masked_array(LsT[:,5], mask = PS.mask[:,5])
     LWW = np.ma.masked_outside(LWW, yt[0], yt[1])
     
-    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive (1)') #Dispersive Regime
-    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin (2)') #Chatwin Regime
-    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven (3-4)') #WW Regime
+    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
+    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
+    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven') #WW Regime
     #axs[1].plot(varx, Ls, lw = 2, c = 'k')
     
     axs[1].set_yscale('log')
     axs[1].legend()
     # Here, insert theoretical prediction.
     
-    aTT = PS.aTT
-    for ind in range(len(aTT)-1): axs[2].plot(varx, np.squeeze(aTT[ind]), color=col[ind], label = labT[ind])
-    ind = len(aTT)-1
-    axs[2].plot(varx, np.abs(np.squeeze(aTT[ind])), color=col[ind], label = labT[ind])
+    T = PS.T
+    for ind in range(T.shape[1]-1): axs[2].plot(varx, np.squeeze(T[:,ind]), color=col[ind], label = labT[ind])
+    ind = T.shape[1]-1
+    axs[2].plot(varx, np.abs(np.squeeze(T[:,ind])), color = col[ind], label = labT[ind])
     axs[2].legend()
     axs[2].title.set_text('Transports')
     
@@ -679,14 +885,14 @@ def plotDim2(PS, dimDict):
     fig, axs = plt.subplots(3,1)
     #fig.suptitle('Sensitivity: Wind and Depth')
     #Ra, Fr, Fw, 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     varx = dimDict[namex]
     vary = dimDict[namey]
     plt.tight_layout()
     cfig = axs[0].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Reg, 20, cmap = plt.get_cmap('plasma'))
     axs[0].contour(cfig, levels = np.linspace(.5, 4.5), colors = 'k', linewidths = 0.5)
     #axs[0,2].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    #axs[0,2].contourf(Ra, Fr, Reg, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    #axs[0,2].contourf(Ra, Fr, Reg, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     #axs[0,2].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[0].title.set_text('Regime')
     cb = plt.colorbar(cfig, ax = axs[0], ticks = [1 ,2, 3, 4])
@@ -700,7 +906,7 @@ def plotDim2(PS, dimDict):
     cfig = axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
     axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
     axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     #axs[1].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[1].title.set_text(r'Stratification $\Phi_0$')
     plt.colorbar(cfig, ax = axs[1])
@@ -742,7 +948,7 @@ def plotDim3(PS, dimDict):
             
     cmap = 'Blues'
     
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     quan = [np.count_nonzero(np.round(Reg) == ind) for ind in range(5)]
     
     fig = plt.figure()
@@ -878,12 +1084,12 @@ def plotModel(SM, PS):
     
     f1 = axs[1,0].contourf(Xp, sigmap, S, 50, cmap=cmap, corner_mask = True)
     axs[1,0].contour(f1, levels = np.linspace(0,1,10), colors = 'k', linewidths = 0.5)
-    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, alpha = 0.2)
+    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, l = 0.2)
     axs[1,0].title.set_text(f'Salinity: Negative = {SM.maskNEG} and Unstable = {SM.maskIS}')
     axs[1,0].set_xlabel(r'$X$')
     axs[1,0].set_ylabel(r'$\sigma$')
     if np.amin(S) < 0:
-        axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], alpha = 0)
+        axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], l = 0)
         axs[1,0].contour(f1, levels = [0], colors='w', linewidths = 1.5)
     plt.colorbar(f1, ax=axs[1,0])
     
@@ -934,12 +1140,12 @@ def plotModel(SM, PS):
     
     # From here, we continue with PS
     
-    Ra, Fr, Fw, Phi_0, Ls, Reg = np.squeeze(PS.Ra), np.squeeze(PS.Fr), np.squeeze(PS.Fw), np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xa)), np.squeeze(PS.Reg)
+    Ra, Fr, Fw, Phi_0, Ls, Reg = np.squeeze(PS.Ra), np.squeeze(PS.Fr), np.squeeze(PS.Fw), np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     
     cfig = axs[0,2].contourf(Ra, Fr, Reg, 20, cmap = plt.get_cmap('plasma'))
     #axs[0,2].contour(cfig,  colors = 'k', linewidths = 0.5)
     #axs[0,2].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    #axs[0,2].contourf(Ra, Fr, Reg, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    #axs[0,2].contourf(Ra, Fr, Reg, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     axs[0,2].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[0,2].title.set_text(r'Regime = '+ f'{float(SM.Reg):.1f}' + r' with $F_W$ = ' + f'{SM.Fw:.3f}')
     axs[0,2].set_xlabel(r'Ra')
@@ -958,7 +1164,7 @@ def plotModel(SM, PS):
     cfig = axs[1,2].contourf(Ra, Fr, Phi_0, 50, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
     axs[1,2].contour(cfig,  colors = 'k', linewidths = 0.5)
     axs[1,2].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    axs[1,2].contourf(Ra, Fr, Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    axs[1,2].contourf(Ra, Fr, Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     axs[1,2].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[1,2].title.set_text(r'Stratification $\Phi_0$')
     axs[1,2].set_xlabel(r'Ra')
@@ -973,7 +1179,7 @@ def plotModel(SM, PS):
     cfig2 = axs[2,2].contourf(Ra, Fr, Ls, 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
     axs[2,2].contour(cfig2,  colors = 'k', linewidths = 0.5)
     axs[2,2].contour(cfig2, levels = [1e-3, 1e-2, 1e-1, 1, 10, 100], colors='k', linewidths = 1)
-    #axs[1,2].contourf(Ra, Fr, Xa, levels = [np.min([np.amin(Xa),-1]), np.max([np.amin(self.Xa),-1]),0], vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
+    #axs[1,2].contourf(Ra, Fr, Xs, levels = [np.min([np.amin(Xs),-1]), np.max([np.amin(self.Xs),-1]),0], vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
     axs[2,2].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[2,2].title.set_text(r'Salt Intrusion $L_s$')
     axs[2,2].set_xlabel(r'Ra')
@@ -991,7 +1197,7 @@ def plotSModel(SM):
     col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
     
     U, W = SM.U, SM.W
-    T = SM.T
+    TX = SM.TX
 
     labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
     cmap = 'Blues'
@@ -1019,13 +1225,13 @@ def plotSModel(SM):
     
     f1 = axs[1,0].contourf(Xp, sigmap, S, 50, cmap=cmap, corner_mask = True)
     axs[1,0].contour(f1, levels = np.linspace(0,1,10), colors = 'k', linewidths = 0.5)
-    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, alpha = 0.2)
-    axs[1,0].title.set_text(f'Salinity: Negative = {SM.maskNEG} and Unstable = {SM.maskIS}')
+    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, l = 0.2)
+    #axs[1,0].title.set_text(f'Salinity: Negative = {SM.maskNEG} and Unstable = {SM.maskIS}')
     axs[1,0].set_xlabel(r'$X$')
     axs[1,0].set_ylabel(r'$\sigma$')
-    if np.amin(S) < 0:
-        axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], alpha = 0)
-        axs[1,0].contour(f1, levels = [0], colors='w', linewidths = 1.5)
+    #if np.amin(S) < 0:
+        #axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], l = 0)
+        #axs[1,0].contour(f1, levels = [0], colors='w', linewidths = 1.5)
     plt.colorbar(f1, ax=axs[1,0])
     
     mag = np.sqrt(U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2)
@@ -1037,11 +1243,11 @@ def plotSModel(SM):
     axs[2,0].contour(f2, levels = [0], colors='w', linewidths = 1.5)
     plt.colorbar(f2, ax=axs[2,0])  
     
-    for t in range(len(T)):
+    for t in range(len(TX)):
         if t<7:
-            axs[0,1].plot(X, T[t], label = labT[t], color = col[t])
+            axs[0,1].plot(X, TX[t], label = labT[t], color = col[t])
         else:
-            axs[0,1].plot(X, np.abs(T[t]), '-.', label = labT[t], color = col[t])
+            axs[0,1].plot(X, np.abs(TX[t]), '-.', label = labT[t], color = col[t])
     axs[0,1].title.set_text('Salt transport')
     axs[0,1].set_xlabel(r'$X$')
     axs[0,1].set_ylabel('Relative contribution')
@@ -1050,10 +1256,10 @@ def plotSModel(SM):
     
 
     # Change the bar colors here
-    SM.aTT[-1] = np.abs(SM.aTT[-1])
-    axs[1,1].bar(labT, SM.aTT, color=col)
-    axs[1,1].bar(labT[-1], SM.aTT[-1], color=col[-1], hatch = '//')
-    axs[1,1].title.set_text('Integrated salt transport: Regime = '+ np.array2string(*SM.Reg))
+    SM.T[-1] = np.abs(SM.T[-1])
+    axs[1,1].bar(labT, SM.T, color=col)
+    axs[1,1].bar(labT[-1], SM.T[-1], color=col[-1], hatch = '//')
+    #axs[1,1].title.set_text('Integrated salt transport: Regime = '+ np.array2string(*SM.Reg))
     #axs[1,1].set_xlabel(r'$X$')
     axs[1,1].set_ylabel('Relative contribution')
     axs[1,1].grid(True)
@@ -1067,7 +1273,7 @@ def plotSModel(SM):
     axs[2,1].plot(Sb_Xplot, Sbplot, ls = 'dotted', label = 'Curve')
     axs[2,1].plot(Sb_X, Sb, lw = 2, label = 'Realised')
     axs[2,1].scatter(SM.Exx, SM.Exy, marker = 'o', label = 'J = 0 or H = 0')
-    axs[2,1].title.set_text(r'$\bar{\Sigma}_X - \bar{\Sigma}$ Curve - ' + f'Non-unique = {SM.maskNU}')
+    #axs[2,1].title.set_text(r'$\bar{\Sigma}_X - \bar{\Sigma}$ Curve - ' + f'Non-unique = {SM.maskNU}')
     axs[2,1].set_xlabel(r'$\bar{\Sigma}_X$')
     axs[2,1].set_ylabel(r'$\bar{\Sigma}$')
     axs[2,1].grid(True)

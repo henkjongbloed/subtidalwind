@@ -10,19 +10,22 @@ from scipy.interpolate import griddata
 from matplotlib.animation import FuncAnimation
 import time
 import warnings
+import sys
+
 
 np.seterr(divide = 'ignore') 
 warnings.filterwarnings('ignore')
+plt.rcParams['axes.xmargin'] = 0
 gp = globalParameters(R = 2) #Setting parameters such as BC, alpha
 
 
-dd, ndd = makeDicts(gp,'H', tau_w = .1)
+dd, ndd = makeDicts(gp, 'tau_w')
 PS = ParameterSweep(gp,ndd,1).run()
 plotDim(PS, dd)
 # Hello World!
 plt.show()
 
-ndd = makeNDDict(gp, Fw=0)
+ndd = makeNDDict(gp)
 SM = SingleNonDim(gp, ndd).run()
 plotSModel(SM)
 #ndd2 = makeNDDict(gp)
@@ -49,4 +52,4 @@ EXr = [ex.run() for ex in EX]
 
 #PS3.run()
 '''
-plt.show()
+#plt.show()
