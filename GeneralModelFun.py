@@ -9,19 +9,20 @@ from matplotlib import ticker, cm
 import matplotlib.tri as mtri
 import matplotlib.colors as co
 
-
 def globalParameters(**kwargs):
     gp = dict(R = 2, #R: real or Inf
         q = 1/30, #Salinity fraction at landward end
-        n = [1, 401, 51, 21], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
+        n = [1, 401, 31, 13], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
         SM = [1001,21], #Single model run: grid.
         PS = [51,11],
-        tolNEG = 1,
-        tolUN = 10,
-        tolPrit = 10,
+        tolNEG = .1,
+        tolUN = .1,
+        tolPrit = 10, #not employed in current version of script.
         Sc = 2.2,
-        m = 2.0 #tuning factor for mixing algorithm
+        m = 1.2, #tuning factor for mixing algorithm
+        Ori = True, #Plots 'Original' parameters instead of modified ones.
         )
+    
     gp['C'] = addC(gp['R'])
     for key, value in kwargs.items(): #Change the constant parameters
             gp[key] = value
@@ -45,6 +46,18 @@ def computeD3(a,b,c,d):
 def computeD2(a,b,c):
     D2 = b**2 - 4*a*c
     return D2
+
+def Ra2Ft(Ra):
+    '''
+    Using the Banas and Ralston parametrisations
+    '''
+    return Ra**(-1/2)/(3.9e5)
+
+def Ft2Ra(Ft):
+    '''
+    Using the Banas and Ralston parametrisations
+    '''
+    return 3.9e5*Ft**-2
 
 def computeLocalExtrema(a,b,c,d):
     '''Returns the discriminant and local extrema of the S - S_X curve'''
@@ -171,6 +184,7 @@ def makeDicts(gp, *args, **kwargs):
 
     #ndd = dim2nondim(dd)
     dd['pars'] = args
+    
     ndd['pars'] = args
     if len(ndd['pars']) > 1:
         n = np.prod(ndd['nps'])
@@ -178,6 +192,15 @@ def makeDicts(gp, *args, **kwargs):
         n = ndd['nps']
     ndd['Ra'], ndd['Fr'], ndd['Fw'] = ndd['Ra']*np.ones(n), ndd['Fr']*np.ones(n), ndd['Fw']*np.ones(n) #Make sure everything is the same size.
     ndd['n'] = n
+    
+    if 'name' in kwargs:
+        ndd['name'] = kwargs['name']
+    else:
+        ndd['name'] = ndd['pars']
+        dd['name'] = dd['pars']
+        
+    dd['c'] = np.sqrt(dd['g']*dd['beta']*dd['s_0']*dd['H'])
+    
     return dd, ndd
 
 def makeNDDict(gp, *args, **kwargs):
@@ -352,22 +375,22 @@ def nonDim2ODECoeff(gp, Ra, Fr, Fw, Sc):
         np.ones_like(Ra),                                #D
         Fr]))                             #F
     
-    if gp['Class'] == 'PS':
-        a = L[:,0]
-        b = L[:,1] + L[:,2]
-        c = L[:,3] + L[:,4] + L[:,5] + L[:,6]
-        d = L[:,7]
-    else:
-        a = L[0]
-        b = L[1] + L[2]
-        c = L[3] + L[4] + L[5] + L[6]
-        d = L[7]
+    #if gp['Class'] == 'PS':
+    #    a = L[:,0]
+    #    b = L[:,1] + L[:,2]
+    #    c = L[:,3] + L[:,4] + L[:,5] + L[:,6]
+    #    d = L[:,7]
+    #else:
+    a = L[0]
+    b = L[1] + L[2]
+    c = L[3] + L[4] + L[5] + L[6]
+    d = L[7]
         
     b0 = b + d*Sc*Ra**2*C[10]
     c0 = c + d*Sc*Ra*(Fr*C[9] + Fw*C[11])
     return L, a, b, c, d, b0, c0
 
-def processBC(gp, Sb_X0, a, b, c, d, Ra, Fr, Fw, Sc):
+def processBC(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0):
     C = gp['C']
     Sb_0 = (a*Sb_X0**3 + b*Sb_X0**2 + c*Sb_X0) / d
     S_00 = Sb_0 + Sc*Ra*Sb_X0*(Fr*C[6] + Ra*Sb_X0*C[7] + Fw*C[8])
@@ -437,11 +460,17 @@ def computeNU(gp, D2, Exx, a, b, c, d, Sb_X0, Sb_0):
 
 def computePhysicalMasks(gp, Ra, Fr, Fw, Sc, Sb, Sb_X):
     Ssurf, Sbot = computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X)
-    maskNEG = np.any((Ssurf < -gp['tolNEG'])) # 1 if there is negative salt
-    maskUN = np.any((Sbot - Ssurf < -gp['tolUN'])) # 1 if there exists a point of unstable stratification
+    maskNEG = np.any((Ssurf < -gp['tolNEG'])) # 1 if there is negative salt (within tolNEG)
+    maskUN = np.any((Sbot - Ssurf < -gp['tolUN'])) # 1 if there exists a point of unstable stratification (within tolUNSTABLE)
     return maskNEG, maskUN
 
 def computePhysicalMasksPS(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, rs):
+    '''
+    Returns maskNEG and maskUNSTABLE (tolerances specified by gp)
+    
+    Only looks at surface and bottom salinity, not intermediate.
+    
+    '''
     _,_, Sb, Sb_X, _ = solveODE(gp, a, b, c, d, Sb_X0, rs)
     Ssurf, Sbot = computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X)
     maskNEG = np.any((Ssurf < -gp['tolNEG'])) # 1 if there is negative salt
@@ -449,17 +478,14 @@ def computePhysicalMasksPS(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, rs):
     return maskNEG, maskUN
 
 
-def increaseK_M(gp, mask0, Ra0, Fw0):
+def findMixing(fac, Ra0, Fw0):
     '''
     Increases K_M in case any mask equals 1. This is equivalent to decreasing Ra and Fw by the same factor.
     '''
-    m = gp['m']
-    mask = np.copy(mask0)
-    
-    while np.any(mask):
-        Ra, Fw = Ra0/m, Fw0/m
-        
-    return
+    Ra = Ra0/fac
+    Fw = Fw0/fac
+    #print('fix')
+    return Ra, Fw, True
 
 #def computeScaling()
 
@@ -526,7 +552,7 @@ def computeLsTheory(gp,L,Sb_0):
     q = gp['q']
     LsT = np.array([3/2*Sb_0**(2/3)*L[0]**(1/3)/L[7]**(1/3)*(1-q**2/3),
                 2*np.sqrt(L[1])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7], 
-                2*np.sqrt(L[2])*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7],
+                np.sign(L[2])*2*np.sqrt(np.abs(L[2]))*(np.sqrt(Sb_0) - q**2*Sb_0**2)/L[7],
                 -L[3]/L[7]*np.log(Sb_0*q),
                 -L[4]/L[7]*np.log(Sb_0*q),
                 -L[5]/L[7]*np.log(Sb_0*q),
@@ -534,15 +560,17 @@ def computeLsTheory(gp,L,Sb_0):
         )
     return LsT
     
-def symlog10(x,l = 1/10000/np.log(10)):
+    
+#def initMixPar(gp):
+    #mixPar = dict()
+def symlog10(x,l = 1/np.log(10)):
     return np.sign(x)*np.log10(1.0 + np.abs(x/l))
     
-def invsymlog10(y,l = 1/10000/np.log(10)):
+def invsymlog10(y,l = 1/np.log(10)):
     return np.sign(y)*l*(-1.0 + 10**np.abs(y))
 
 
 def plotSpace(SM, PS, PSd):
-    
     sRa, sFr, sFw = np.log10(PS.Ra.ravel()), np.log10(PS.Fr.ravel()), symlog10(PS.Fw.ravel())
     totMask = PS.totMask
     
@@ -615,99 +643,263 @@ def plotNDim(PS):
 def plotNDim1(PS):
     col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
     labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
+    #namex = dimDict['pars'][0]
+    #tm = np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]], dtype = bool))
+    # Prepare background color for plots
     ndd = PS.nondimDict
     namex = ndd['pars'][0]
-    tm = np.transpose(np.array([PS.totMask, PS.totMask], dtype = bool))
-    # Prepare background color for plots
-    
-    #Reg = ma.masked_array(Reg, mask = tm)
-    
-    LSReg = PS.LSReg
-    fig, axs = plt.subplots(3,1)
-    #fig.suptitle('Se)
-    plt.tight_layout()
+    if PS.gp['Ori']:
+        namex = namex+'Ori'
 
+    if 'Fw' in namex:
+        varx = symlog10(getattr(PS, namex).reshape(PS.nps))
+    else:
+        varx = np.log10(getattr(PS, namex).reshape(PS.nps))
+    
     Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
-    varx = np.ma.masked_array(ndd[namex], mask = PS.totMask)
-    #varx = PS.dimDict[namex]
-    Regcolor = np.transpose(np.array([Reg, Reg]))
-    Regcolor = np.ma.masked_array(Regcolor, mask = tm)
-    #if namex == 'tau_w':
-        #varx = invsymlog10(varx)
-    
+    LsT = PS.LsT
 
-    yt = np.array([np.amin(Phi_0), np.amax(Phi_0)])
-    x, y = np.meshgrid(varx, yt, indexing = 'ij')
+    Regcolor = np.array([Reg, Reg])
+    extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
+    Ll, Lu = 1/2*np.amin(Ls), 2*np.amax(Ls)
+    extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
     #x, y = x.ravel(), y.ravel()
+    
+    LD = np.ma.masked_array(LsT[:,6])
+    LD = np.ma.masked_outside(LD, Ll, Lu)
+    
+    LGG = np.ma.masked_array(LsT[:,0])
+    LGG = np.ma.masked_outside(LGG, Ll, Lu)
+    
+    LWW = np.ma.masked_array(LsT[:,5])
+    LWW = np.ma.masked_outside(LWW, Ll, Lu)
+    fig, axs = plt.subplots(3,1, sharex = True)
+
+    #plt.tight_layout()
+
+    plt.suptitle(PS.name)    
+    f1 = axs[0].imshow(Regcolor, extent = extentp, origin = 'upper', aspect = 'auto')
     axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
+    axs[0].contourf(*np.meshgrid(varx, np.array([np.amin(Phi_0), np.amax(Phi_0)]), indexing = 'ij'), np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]])), 1, hatches = [" ", "//"], alpha = 0)
+    axs[0].contourf(*np.meshgrid(varx, np.array([np.amin(Phi_0), np.amax(Phi_0)]), indexing = 'ij'), np.transpose(np.array([PS.mask[:,6], PS.mask[:,6]])), 1, hatches = [" ", "."], alpha = 0)
     axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
-    f1 = axs[0].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), l = 1)
-    cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
-    
-    
-    yt = np.array([np.amin(Ls)/3, np.amax(Ls)*3])
-    x, y = np.meshgrid(varx, yt, indexing = 'ij')
+    if 'Fw' in namex:
+        axs[0].plot([0,0], np.array([np.amin(Phi_0), np.amax(Phi_0)]), c = 'w')
+
     axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
-    axs[1].title.set_text(r'Salt intrusion $L_s$')
-    f2 = axs[1].contourf(x, y, Regcolor, cmap = plt.get_cmap('plasma'), l = 1)
-    cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
-    
-    LD = np.ma.masked_array(LSReg[6], mask = PS.totMask)
-    LD = np.ma.masked_outside(LD, yt[0], yt[1])
-    
-    LGG = np.ma.masked_array(LSReg[0], mask = PS.totMask)
-    LGG = np.ma.masked_outside(LGG, yt[0], yt[1])
-    
-    LWW = np.ma.masked_array(LSReg[5], mask = PS.totMask)
-    LWW = np.ma.masked_outside(LWW, yt[0], yt[1])
-    
-    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive (1)') #Dispersive Regime
-    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin (2)') #Chatwin Regime
-    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven (3-4)') #WW Regime
-    #axs[1].plot(varx, Ls, lw = 2, c = 'k')
-    
+    axs[1].title.set_text(r'Salt intrusion $\Lambda_s$ (NonDim)')
+    f2 = axs[1].imshow(Regcolor, extent = extentl, origin = 'upper', aspect = 'auto')
+    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
+    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
+    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven') #WW Regime
+    axs[1].contourf(*np.meshgrid(varx, np.array([Ll, Lu]), indexing = 'ij'), np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]])), 1, hatches = [" ", "//"], alpha = 0)
+    axs[1].contourf(*np.meshgrid(varx, np.array([Ll, Lu]), indexing = 'ij'), np.transpose(np.array([PS.mask[:,6], PS.mask[:,6]])), 1, hatches = [" ", "."], alpha = 0)
+    if 'Fw' in namex:
+        axs[1].plot([0,0], np.array([Ll, Lu]), c = 'w')
     axs[1].set_yscale('log')
     axs[1].legend()
-    # Here, insert theoretical prediction.
-    
-    aTT = PS.aTT
-    for ind in range(len(aTT)-1): axs[2].plot(varx, np.squeeze(aTT[ind]), color=col[ind], label = labT[ind])
-    ind = len(aTT)-1
-    axs[2].plot(varx, np.abs(np.squeeze(aTT[ind])), color=col[ind], label = labT[ind])
+
+    T = PS.T
+    for ind in range(T.shape[1]-1): axs[2].plot(varx, np.squeeze(T[:,ind]), color=col[ind], label = labT[ind])
+    ind = T.shape[1]-1
+    axs[2].plot(varx, np.abs(np.squeeze(T[:,ind])), color = col[ind], label = labT[ind])
     axs[2].legend()
     axs[2].title.set_text('Transports')
+    axs[2].set_xlabel(ndd['pars'][0])
     
-    for i in range(3):
-        if namex == 'Fw':
-            axs[i].set_xscale('symlog')
-        else:
-            axs[i].set_xscale('log')
-        axs[i].set_xlabel(namex)
+    #for i in range(3):
+        #axs[i].set_ylabel(ndd['pars'][1])
+        #if 'Fw' in namex:
+            #axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
+    
+    #if 'tau_w' in namex:
+        #axs[2].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w')
+    #yl = ['']
+    #for i in range(3):
+        #else:
+        #axs[i].set_xscale('linear')
+        #axs[i].set_ylabel(namex)
         #axs[i].grid(True)
 
 def plotNDim2(PS):
     ndd = PS.nondimDict
     namex, namey = ndd['pars']
+    if PS.gp['Ori']:
+        namex, namey = namex+'Ori', namey+'Ori'
     cmap = 'Blues'
-    fig, axs = plt.subplots(3,1)
-    #fig.suptitle('Sensitivity: Wind and Depth')
-    #Ra, Fr, Fw, 
+    fig, axs = plt.subplots(3,1, sharex = True)
     Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
-    varx = ndd[namex]
-    vary = ndd[namey]
-    plt.tight_layout()
-    cfig = axs[0].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Reg, 20, cmap = plt.get_cmap('plasma'))
-    axs[0].contour(cfig, levels = np.linspace(.5, 4.5), colors = 'k', linewidths = 0.5)
+    nps = PS.nps
+    if 'Fw' in namex:
+        varx = symlog10(getattr(PS, namex).reshape(PS.nps))
+    else:
+        varx = np.log10(getattr(PS, namex).reshape(PS.nps))
+    if 'Fw' in namey:
+        vary = symlog10(getattr(PS, namey).reshape(PS.nps))
+    else:
+        vary = np.log10(getattr(PS, namey).reshape(PS.nps))
+    
+    Regcolor = np.swapaxes(np.reshape(Reg, (*nps, 3)), 0, 1)
+    plt.suptitle(PS.name)
+    #plt.tight_layout()
+    axs[0].imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'lower', aspect = 'auto')
+    axs[0].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[0].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0)
     axs[0].title.set_text('Regime')
-    cb = plt.colorbar(cfig, ax = axs[0], ticks = [1 ,2, 3, 4])
+    #if 'Fw' in namex:
+        #axs[0].plot([0,0], np.array([np.amin(vary), np.amax(vary)]), c = 'w')
+    #plt.xticks([-6,-5,-4,-3,-2,-1,0,1,2,3,4,5], ['$10^{-6}$', '$10^{-5}$', '$10^{-4}$', '$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$', '$10$', '$10^2$', '$10^3$', '$10^4$', '$10^5$'])
+    #plt.yticks([-3,-2,-1,0], ['$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
 
     hl = [np.min([np.amin(Phi_0),0]), np.max([np.amin(Phi_0),0]), np.min([np.amax(Phi_0),1]), np.max([np.amax(Phi_0),1])]
     hl.sort()
     minz, maxz = np.min(Phi_0), np.max(Phi_0)
-    cfig = axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
-    axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
-    axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    axs[1].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], l = 0)
+    cfig = axs[1].contourf(varx, vary, Phi_0.reshape(PS.nps), 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz) 
+    axs[1].contourf(varx, vary,  PS.mask[:,5].reshape(PS.nps),1, hatches = [" ", "//"], alpha = 0)
+    axs[1].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0)
+    axs[1].title.set_text(r'Stratification $\Phi_0$')
+    plt.colorbar(cfig, ax = axs[1])
+    #if 'Fw' in namex:
+        #axs[1].plot([0,0], np.array([np.amin(vary), np.amax(vary)]), c = 'w')
+        
+    minz, maxz = np.amin(Ls), np.amax(Ls)
+    cfig2 = axs[2].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Ls.reshape(PS.nps), 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
+    axs[2].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[2].contourf(varx, vary,  PS.mask[:,6].reshape(PS.nps),1, hatches = [" ", "."], alpha = 0)
+    axs[2].title.set_text(r'Salt intrusion $\Lambda_s$')
+    axs[2].set_xlabel(ndd['pars'][0])
+    plt.colorbar(cfig2, ax = axs[2])
+        
+    for i in range(3):
+        axs[i].set_ylabel(ndd['pars'][1])
+        if 'Fw' in namex:
+            axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
+
+
+def plotDim1(PS, dimDict):
+    col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
+    labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
+    namex = dimDict['pars'][0]
+    #tm = np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]], dtype = bool))
+    # Prepare background color for plots
+    
+    #Reg = ma.masked_array(Reg, mask = tm)
+    
+    LsT = PS.LsT
+    
+    fig, axs = plt.subplots(4,1, sharex = True)
+    #fig.suptitle('Se)
+    plt.tight_layout()
+
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
+    LDim = dimDict['K_H']/dimDict['c']
+    LsDim = Ls*LDim
+
+    if namex == 'tau_w':
+        varx = symlog10(dimDict[namex])
+    else:
+        varx = np.log10(dimDict[namex])
+
+    
+    Regcolor = np.array([Reg, Reg])
+    extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
+    Ll, Lu = np.amin(Ls)/1.25, 1.25*np.amax(Ls)
+    extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
+    extentld = (np.amin(varx), np.amax(varx), Ll*LDim, Lu*LDim)
+    #x, y = x.ravel(), y.ravel()
+    
+    LD = np.ma.masked_array(LsT[:,6])
+    LD = np.ma.masked_outside(LD, Ll, Lu)
+    
+    LGG = np.ma.masked_array(LsT[:,0])
+    LGG = np.ma.masked_outside(LGG, Ll, Lu)
+    
+    LWW = np.ma.masked_array(LsT[:,5])
+    LWW = np.ma.masked_outside(LWW, Ll, Lu)
+    
+    axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
+    axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
+    f1 = axs[0].imshow(Regcolor, extent = extentp, origin = 'upper', aspect = 'auto')
+    if 'tau_w' in namex:
+        axs[0].plot([0,0], np.array([np.amin(Phi_0), np.amax(Phi_0)]), c = 'w')
+    #cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
+    
+    
+    axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
+    axs[1].title.set_text(r'Salt intrusion $\Lambda_s$ (NonDim)')
+    f2 = axs[1].imshow(Regcolor, extent = extentl, origin = 'upper', aspect = 'auto')
+    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
+    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
+    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven') #WW Regime
+    axs[1].set_yscale('log')
+    if 'tau_w' in namex:
+        axs[1].plot([0,0], np.array([np.amin(Ls), np.amax(Ls)]), c = 'w')
+    axs[1].legend()
+
+    axs[2].plot(varx, LsDim, lw = 2, c = 'k', label = r'$L_s$')
+    axs[2].title.set_text(r'Salt intrusion $L_s$ (Dim)')
+    axs[2].imshow(Regcolor, extent = extentld, origin = 'upper', aspect = 'auto')
+    axs[2].plot(varx, LD*LDim, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
+    axs[2].plot(varx, LGG*LDim, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
+    axs[2].plot(varx, LWW*LDim, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven') #WW Regime
+    axs[2].set_yscale('log')
+    if 'tau_w' in namex:
+        axs[2].plot([0,0], np.array([np.amin(LsDim), np.amax(LsDim)]), c = 'w')
+    axs[2].legend()
+    # Here, insert theoretical prediction.
+    
+    T = PS.T
+    for ind in range(T.shape[1]-1): axs[3].plot(varx, np.squeeze(T[:,ind]), color=col[ind], label = labT[ind])
+    ind = T.shape[1]-1
+    axs[3].plot(varx, np.abs(np.squeeze(T[:,ind])), color = col[ind], label = labT[ind])
+    axs[3].legend()
+    axs[3].title.set_text('Transports')
+    axs[3].set_xlabel(dimDict['pars'][0])
+    
+    #for i in range(4):
+        #if namex == 'tau_w':
+            #axs[i].set_xscale('linear')
+        #else:
+            #axs[i].set_xscale('linear')
+        #axs[i].set_xlabel(namex)
+        #axs[i].grid(True)
+
+    
+def plotDim2(PS, dimDict):
+    namex, namey = dimDict['pars']
+    cmap = 'Blues'
+    fig, axs = plt.subplots(4,1, sharex = True)
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
+    nps = PS.nps
+    if 'tau_w' in namex:
+        varx = symlog10(dimDict[namex].reshape(PS.nps))
+    else:
+        varx = np.log10(dimDict[namex].reshape(PS.nps))
+        
+    Regcolor = np.reshape(Reg, (*nps, 3))
+    
+    if 'tau_w' in namey:
+        vary = symlog10(dimDict[namey].reshape(PS.nps))
+    else:
+        vary = np.log10(dimDict[namey].reshape(PS.nps))
+    #vary = np.log10(dimDict[namey].reshape(PS.nps))
+    plt.tight_layout()
+    
+    axs[0].imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'upper', aspect = 'auto')
+    axs[0].title.set_text('Regime')
+    axs[0].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[0].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0) 
+
+
+    hl = [np.min([np.amin(Phi_0),0]), np.max([np.amin(Phi_0),0]), np.min([np.amax(Phi_0),1]), np.max([np.amax(Phi_0),1])]
+    hl.sort()
+    minz, maxz = np.min(Phi_0), np.max(Phi_0)
+    cfig = axs[1].contourf(varx, vary, Phi_0.reshape(PS.nps), 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
+    axs[1].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[1].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0)
+    #axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
+    #axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
+    #axs[1].contourf(varx, vary, Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
     #axs[1].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
     axs[1].title.set_text(r'Stratification $\Phi_0$')
     plt.colorbar(cfig, ax = axs[1])
@@ -715,27 +907,37 @@ def plotNDim2(PS):
     minz, maxz = np.amin(Ls), np.amax(Ls)
     #print(np.amin(Ls))
     #cfig2 = axs[2,2].contourf(Ra, Fr, Ls, 20, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
-    cfig2 = axs[2].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Ls, 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
-    axs[2].contour(cfig2,  levels = np.geomspace(minz,maxz), colors = 'k', linewidths = 0.5)
-    axs[2].contour(cfig2, levels = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000], colors='k', linewidths = 1)     
-    axs[2].title.set_text(r'Salt intrusion $L_s$')
+    cfig2 = axs[2].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Ls.reshape(PS.nps), 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
+    axs[2].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[2].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0)   
+    axs[2].title.set_text(r'Salt intrusion $\Lambda_s$')
     plt.colorbar(cfig2, ax = axs[2])
     
-    for i in range(3):
-        if namex == 'Fw':
-            axs[i].set_xscale('symlog')
-            axs[i].set_xlabel('Fw')
+    LDim = dimDict['K_H']/dimDict['c']*np.ones_like(Ls)
+    LsDim = Ls*LDim
+    
+    minz, maxz = np.amin(LsDim), np.amax(LsDim)
+    #print(np.amin(Ls))
+    #cfig2 = axs[2,2].contourf(Ra, Fr, Ls, 20, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
+    cfig3 = axs[3].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), LsDim.reshape(PS.nps), 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
+    axs[3].contourf(varx, vary, PS.mask[:,5].reshape(PS.nps), 1, hatches = [" ", "//"], alpha = 0)
+    axs[3].contourf(varx, vary, PS.mask[:,6].reshape(PS.nps), 1, hatches = [" ", "."], alpha = 0)     
+    axs[3].title.set_text(r'Salt intrusion $L_s$')
+    axs[3].set_xlabel(dimDict['pars'][0])
+    plt.colorbar(cfig3, ax = axs[3])
+    
+    for i in range(4):
+        if 'tau_w' in namey:
+            #axs[i].set_xscale('symlog')
             axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
-        else:
-            axs[i].set_xscale('log')
-            axs[i].set_xlabel(namex)
+        #else:
+            #axs[i].set_xlabel(namex)
             
-        if namey == 'Fw':
-            axs[i].set_yscale('symlog')
-            axs[i].set_ylabel('Fw')
+        if 'tau_w' in namey:
+            axs[i].set_ylabel(r'$\tau_w$')
         else:
-            axs[i].set_yscale('log')
-            axs[i].set_ylabel(namey) 
+            axs[i].set_ylabel(dimDict['pars'][1]) 
+
 
 def plotNDim3(PS):
     sRa, sFr, sFw = np.log10(PS.Ra.ravel()), np.log10(PS.Fr.ravel()), symlog10(PS.Fw.ravel())
@@ -780,137 +982,6 @@ def plotNDim3(PS):
     ax.set_ylabel('Fr')
     ax.set_zlabel('Fw')
     ax.set_title('Dominant Terms: #' + str(PS.domTerm))
-    
-
-def plotDim1(PS, dimDict):
-    col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
-    labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
-    namex = dimDict['pars'][0]
-    tm = np.transpose(np.array([PS.mask[:,5], PS.mask[:,5]], dtype = bool))
-    # Prepare background color for plots
-    
-    #Reg = ma.masked_array(Reg, mask = tm)
-    
-    LsT = PS.LsT
-    fig, axs = plt.subplots(3,1)
-    #fig.suptitle('Se)
-    plt.tight_layout()
-
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
-    
-    if namex == 'tau_w':
-        varx = symlog10(np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5]))
-    else:
-        varx = np.log10(np.ma.masked_array(dimDict[namex], mask = PS.mask[:,5]))
-
-    Regcolor = np.array([Reg, Reg])
-    extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
-    Ll, Lu = 1/2*np.amin(Ls), 2*np.amax(Ls)
-    extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
-    #x, y = x.ravel(), y.ravel()
-    axs[0].plot(varx, Phi_0, lw = 2, c = 'k')
-    axs[0].title.set_text(r'Mouth stratification $\Phi_0$')
-    f1 = axs[0].imshow(Regcolor, extent = extentp, origin = 'upper', aspect = 'auto')
-    
-    #cb = plt.colorbar(f1, ax = axs[0], ticks = [1 ,2, 3, 4])
-    
-    
-    axs[1].plot(varx, Ls, lw = 2, c = 'k', label = r'$L_s$')
-    axs[1].title.set_text(r'Salt intrusion $L_s$')
-    f2 = axs[1].imshow(Regcolor, extent = extentl, origin = 'upper', aspect = 'auto')
-    #cb = plt.colorbar(f2, ax = axs[1], ticks = [1 ,2, 3, 4])
-    
-    LD = np.ma.masked_array(LsT[:,6], mask = PS.mask[:,5])
-    LD = np.ma.masked_outside(LD, Ll, Lu)
-    
-    LGG = np.ma.masked_array(LsT[:,0], mask = PS.mask[:,5])
-    LGG = np.ma.masked_outside(LGG, Ll, Lu)
-    
-    LWW = np.ma.masked_array(LsT[:,5], mask = PS.mask[:,5])
-    LWW = np.ma.masked_outside(LWW, Ll, Lu)
-    
-    axs[1].plot(varx, LD, ls = '-', lw = 1, c = 'w', label = 'Dispersive') #Dispersive Regime
-    axs[1].plot(varx, LGG, ls = '--', lw = 1, c = 'w', label = 'Chatwin') #Chatwin Regime
-    axs[1].plot(varx, LWW, ls = '-.', lw = 1, c = 'w', label = 'Wind-driven') #WW Regime
-    #axs[1].plot(varx, Ls, lw = 2, c = 'k')
-    
-    axs[1].set_yscale('log')
-    axs[1].legend()
-    # Here, insert theoretical prediction.
-    
-    T = PS.T
-    for ind in range(T.shape[1]-1): axs[2].plot(varx, np.squeeze(T[:,ind]), color=col[ind], label = labT[ind])
-    ind = T.shape[1]-1
-    axs[2].plot(varx, np.abs(np.squeeze(T[:,ind])), color = col[ind], label = labT[ind])
-    axs[2].legend()
-    axs[2].title.set_text('Transports')
-    
-    for i in range(3):
-        if namex == 'tau_w':
-            axs[i].set_xscale('linear')
-        else:
-            axs[i].set_xscale('linear')
-        axs[i].set_xlabel(namex)
-        #axs[i].grid(True)
-
-    
-def plotDim2(PS, dimDict):
-    namex, namey = dimDict['pars']
-    cmap = 'Blues'
-    fig, axs = plt.subplots(3,1)
-    #fig.suptitle('Sensitivity: Wind and Depth')
-    #Ra, Fr, Fw, 
-    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0.reshape(PS.nps)), np.abs(np.squeeze(PS.Xs).reshape(PS.nps)), np.squeeze(PS.Reg)
-    nps = PS.nps
-    if namex == 'tau_w':
-        varx = symlog10(dimDict[namex].reshape(PS.nps))
-    else:
-        varx = np.log10(dimDict[namex].reshape(PS.nps))
-    Regcolor = np.reshape(Reg, (*nps, 3))
-    
-    vary = np.log10(dimDict[namey].reshape(PS.nps))
-    plt.tight_layout()
-    
-    axs[0].imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'upper', aspect = 'auto')
-    axs[0].title.set_text('Regime')
-    plt.xticks([-6,-5,-4,-3,-2,-1,0,1,2,3,4,5], ['$10^{-6}$', '$10^{-5}$', '$10^{-4}$', '$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$', '$10$', '$10^2$', '$10^3$', '$10^4$', '$10^5$'])
-    plt.yticks([-3,-2,-1,0], ['$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
-    #cb = plt.colorbar(cfig, ax = axs[0], ticks = [1 ,2, 3, 4])
-    #cb.ax.set_yticklabels(['1', '2', '3', '4'])
-    #cb = plt.colorbar(cfig, ax = axs[0,2])
-    #cb.ax.set_yticklabels(['1', '2', '3', '4'])    
-
-    hl = [np.min([np.amin(Phi_0),0]), np.max([np.amin(Phi_0),0]), np.min([np.amax(Phi_0),1]), np.max([np.amax(Phi_0),1])]
-    hl.sort()
-    minz, maxz = np.min(Phi_0), np.max(Phi_0)
-    cfig = axs[1].contourf(varx, vary, Phi_0, 20, cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
-    axs[1].contour(cfig,  levels = np.linspace(minz, maxz), colors = 'k', linewidths = 0.5)
-    axs[1].contour(cfig, levels = [0,1], colors='k', linewidths = 1)
-    #axs[1].contourf(varx, vary, Phi_0, levels = hl, vmin = minz, vmax = maxz, hatches = [".", "", "//"], alpha = 0)
-    #axs[1].scatter(SM.Ra, SM.Fr, color = 'k', marker = 'o')    #axs[1,2].clabel(cfigc, cfigc.levels, inline = True, fontsize = 10)       
-    axs[1].title.set_text(r'Stratification $\Phi_0$')
-    plt.colorbar(cfig, ax = axs[1])
-
-    minz, maxz = np.amin(Ls), np.amax(Ls)
-    #print(np.amin(Ls))
-    #cfig2 = axs[2,2].contourf(Ra, Fr, Ls, 20, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True, vmin = minz, vmax = maxz)
-    cfig2 = axs[2].contourf(varx.reshape(PS.nps), vary.reshape(PS.nps), Ls, 50, locator=ticker.LogLocator(), cmap = cmap, corner_mask = True)
-    #axs[2].contour(cfig2,  levels = np.geomspace(minz,maxz), colors = 'k', linewidths = 0.5)
-    #axs[2].contour(cfig2, levels = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000], colors='k', linewidths = 1)     
-    axs[2].title.set_text(r'Salt intrusion $L_s$')
-    plt.colorbar(cfig2, ax = axs[2])
-    
-    for i in range(3):
-        if namex == 'tau_w':
-            axs[i].set_xscale('symlog')
-            axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
-        else:
-            axs[i].set_xlabel(namex)
-            
-        if namey == 'tau_w':
-            axs[i].set_ylabel(r'$\tau_w$')
-        else:
-            axs[i].set_ylabel(namey) 
 
 def plotDim3(PS, dimDict):
     names = dimDict['pars'] #tuple of variables that were varied.
@@ -1021,6 +1092,154 @@ def plot3D(PS):
         ax.set_zlabel('Fw')
         ax.set_title(labT[ind])
     
+def plotSModel(SM):
+    X, Xp, sigmap, sigma = SM.X, SM.Xp, SM.sigmap, SM.sigma
+    S, Sb = SM.S, SM.Sb
+    
+    Sb_X, r = SM.Sb_X, SM.r
+    
+    col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
+    
+    U, W = SM.U, SM.W
+    TX = SM.TX
+
+    labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
+    cmap = 'Blues'
+    
+    xnew = np.linspace(np.min(X), 0, np.max(np.shape(X)))
+    Xp_interp, _ = np.meshgrid(xnew, sigma)
+    
+    U_interp  = griddata((np.ravel(sigmap), np.ravel(Xp)), np.ravel(U) , (sigmap, Xp_interp), method='linear')
+    W_interp  = griddata((np.ravel(sigmap), np.ravel(Xp)), np.ravel(W) , (sigmap, Xp_interp), method='linear')
+
+    
+    _, axs = plt.subplots(3,2)
+    plt.tight_layout()
+    
+    
+    axs[0,0].plot(X, Sb, 'k', label = 'Averaged')
+    axs[0,0].plot(X, S[-1,:], 'k:', label = 'Surface') #S[-1,:] is landward surface, S[0,:] is seaward bottom (REVERSED)
+    axs[0,0].plot(X, S[0,:], 'k-.', label = 'Bottom')
+    axs[0,0].plot(X, S[0,:] - S[-1,:], 'k--', label = 'Stratification')    
+    axs[0,0].title.set_text('Averaged salinity')
+    axs[0,0].set_xlabel(r'$X$')
+    axs[0,0].set_ylabel(r'$\bar{\Sigma}$')
+    axs[0,0].legend()
+    axs[0,0].grid(True)
+    
+    f1 = axs[1,0].contourf(Xp, sigmap, S, 50, cmap=cmap, corner_mask = True)
+    axs[1,0].contour(f1, levels = np.linspace(0,1,10), colors = 'k', linewidths = 0.5)
+    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, l = 0.2)
+    axs[1,0].title.set_text(f'Salinity: Negative = {SM.mask[3]} and Unstable = {SM.mask[4]}')
+    axs[1,0].set_xlabel(r'$X$')
+    axs[1,0].set_ylabel(r'$\sigma$')
+    #if np.amin(S) < 0:
+        #axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], l = 0)
+        #axs[1,0].contour(f1, levels = [0], colors='w', linewidths = 1.5)
+    plt.colorbar(f1, ax=axs[1,0])
+    
+    mag = np.sqrt(U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2)
+    f2 = axs[2,0].contourf(Xp, sigmap, U, 50, cmap = cmap, corner_mask = True)
+    axs[2,0].streamplot(Xp_interp[1:-1, 1:-1], sigmap[1:-1, 1:-1], U_interp[1:-1, 1:-1], W_interp[1:-1, 1:-1], density = 1, color='k', linewidth = mag/mag.max())
+    axs[2,0].title.set_text('Flow')
+    axs[2,0].set_xlabel(r'$X$')
+    axs[2,0].set_ylabel(r'$\sigma$')
+    axs[2,0].contour(f2, levels = [0], colors='w', linewidths = 1.5)
+    plt.colorbar(f2, ax=axs[2,0])  
+    
+    for t in range(len(TX)):
+        if t<7:
+            axs[0,1].plot(X, TX[t], label = labT[t], color = col[t])
+        else:
+            axs[0,1].plot(X, np.abs(TX[t]), '-.', label = labT[t], color = col[t])
+    axs[0,1].title.set_text('Salt transport')
+    axs[0,1].set_xlabel(r'$X$')
+    axs[0,1].set_ylabel('Relative contribution')
+    axs[0,1].legend()
+    axs[0,1].grid(True)
+    
+
+    # Change the bar colors here
+    SM.T[-1] = np.abs(SM.T[-1])
+    axs[1,1].bar(labT, SM.T, color=col)
+    axs[1,1].bar(labT[-1], SM.T[-1], color=col[-1], hatch = '//')
+    axs[1,1].title.set_text('Integrated salt transport: Regime = '+ np.array2string(SM.Reg))
+    #axs[1,1].set_xlabel(r'$X$')
+    axs[1,1].set_ylabel('Relative contribution')
+    axs[1,1].grid(True)
+
+    sbxmin = min([SM.Exx[1], np.min(Sb_X)])
+    sbxmax = max([SM.Exx[0], np.max(Sb_X)])
+
+    Sb_Xplot = np.linspace(sbxmin, sbxmax, 201)
+    Sbplot = np.polyval([SM.a/SM.d,SM.b/SM.d,SM.c/SM.d,0], Sb_Xplot)
+    
+    axs[2,1].plot(Sb_Xplot, Sbplot, ls = 'dotted', label = 'Curve')
+    axs[2,1].plot(Sb_X, Sb, lw = 2, label = 'Realised')
+    axs[2,1].scatter(SM.Exx, SM.Exy, marker = 'o', label = 'J = 0 or H = 0')
+    axs[2,1].title.set_text(r'$\bar{\Sigma}_X - \bar{\Sigma}$ Curve - ' + f'Non-unique = {SM.mask[2]}')
+    axs[2,1].set_xlabel(r'$\bar{\Sigma}_X$')
+    axs[2,1].set_ylabel(r'$\bar{\Sigma}$')
+    axs[2,1].grid(True)
+    axs[2,1].legend()
+    
+def addC(R):
+    C = np.zeros(12)
+    if R != 'Inf':
+        C[0] = (19*R**2+285*R+1116)/(1451520*R**2 + 8709120*R + 13063680) #-P2P5
+        C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4
+        C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6
+        C[3] = (2*R**2)/(105*R**2 + 630*R + 945) #-P1P4
+        C[4] = (5*R**2+31*R)/(840*R**2 + 5040*R + 7560) #-P1P6 = -P3P4
+        C[5] = (R**2+11*R+32)/(1680*R**2 + 10080*R + 15120) #-P3P6
+
+        C[6] = -7/120*R/(R+3) #P4(0)
+        C[7] = -1/2880*(5*R+36)/(R+3) #P5(0)
+        C[8] = -1/240*(3*R+16)/(R+3) #P6(0)
+        C[9] = R/(R+3)*(-1/8 + 1/4 - 7/120) #P4(-1)
+        C[10] = 1/120 - (R+4)/(R+3)/64+(R+6)/(R+3)/96 + C[7]  #P5(-1)
+        C[11] = (R+2)/(R+3)/16 - 1/6 + (R+4)/(R+3)/8+C[8] #P6(-1)
+    
+    else:
+        C[0] = 19/1451520 #P2P5
+        C[1] = 2*19/40320 #P1P5 = P2P4
+        C[2] = 2*1/11520 #P3P5 = P2P6
+        C[3] = 2/105 #P1P4
+        C[4] = 2*1/336 #P1P6 = P3P4
+        C[5] = 1/1680 #P3P6
+
+        C[6] = -7/120 #P4(0)
+        C[7] = -1/576 #P5(0)
+        C[8] = -1/80 #P6(0)
+        C[9] = 1/15 #P4(-1)
+        C[10] = 1/720 #P5(-1)
+        C[11] = 1/120 #P6(-1) 
+    return C
+
+def formFunctions(sigmap, R):
+    if R != 'Inf':    
+        R3 = 1/(R+3)
+        P1 = R*R3*(1/2-3/2*sigmap**2)
+        P2 = 1/48*(R+6)*R3 - 3/16*R3*(R+4)*sigmap**2 - 1/6*sigmap**3
+        P3 = (R+4)*R3/4 + sigmap + 3*(R+2)*R3/4*sigmap**2
+        P4 = R*R3*(-7/120 + sigmap**2/4 - sigmap**4/8)
+        P5 = -(5*R+36)*R3/2880 + 1/96*R3*(R+6)*sigmap**2 - 1/64*(R+4)*R3*sigmap**4 - 1/120*sigmap**5
+        P6 = -1/240*R3*(3*R+16) + 1/8*R3*(R+4)*sigmap**2 + sigmap**3/6 + (R+2)*R3*sigmap**4/16
+        P7 = -1/48*(5*R+18)*R3 - 1/16*(R+4)*R3*sigmap**3 - 1/24*sigmap**4
+        
+    else:
+        P1 = -3/2*sigmap**2 + 1/2
+        P2 = -sigmap**3/6 - 3/16*sigmap**2 + 1/48
+        P3 = 3/4*sigmap**2 + sigmap + 1/4
+        P4 = -1/8*sigmap**4 + sigmap**2/4 - 7/120
+        P5 = -sigmap**5/120 - sigmap**4/64 + sigmap**2/96 - 1/576
+        P6 = sigmap**4/16 + sigmap**3/6 + sigmap**2/8 - 1/80
+        P7 = -5/48 - 1/24*sigmap**4 - 1/16*sigmap**3
+    
+    return P1, P2, P3, P4, P5, P6, P7
+
+#integral functions for computing transport terms
+
     
 def plotModel(SM, PS):
     X, Xp, sigmap, sigma = SM.X, SM.Xp, SM.sigmap, SM.sigma
@@ -1162,154 +1381,3 @@ def plotModel(SM, PS):
     axs[2,2].set_xscale('log')
     axs[2,2].set_yscale('log')
     plt.colorbar(cfig2, format = ticker.LogFormatterMathtext(), ax = axs[2,2])
-    
-def plotSModel(SM):
-    X, Xp, sigmap, sigma = SM.X, SM.Xp, SM.sigmap, SM.sigma
-    S, Sb = SM.S, SM.Sb
-    
-    Sb_X, r = SM.Sb_X, SM.r
-    
-    col = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray']
-    
-    U, W = SM.U, SM.W
-    TX = SM.TX
-
-    labT = ['G-G', 'G-R', 'G-W', 'R-R', 'R-W', 'W-W', 'DI', '|FL|']
-    cmap = 'Blues'
-    
-    xnew = np.linspace(np.min(X), 0, np.max(np.shape(X)))
-    Xp_interp, _ = np.meshgrid(xnew, sigma)
-    
-    U_interp  = griddata((np.ravel(sigmap), np.ravel(Xp)), np.ravel(U) , (sigmap, Xp_interp), method='linear')
-    W_interp  = griddata((np.ravel(sigmap), np.ravel(Xp)), np.ravel(W) , (sigmap, Xp_interp), method='linear')
-
-    
-    _, axs = plt.subplots(3,2)
-    plt.tight_layout()
-    
-    
-    axs[0,0].plot(X, Sb, 'k', label = 'Averaged')
-    axs[0,0].plot(X, S[-1,:], 'k:', label = 'Surface') #S[-1,:] is landward surface, S[0,:] is seaward bottom (REVERSED)
-    axs[0,0].plot(X, S[0,:], 'k-.', label = 'Bottom')
-    axs[0,0].plot(X, S[0,:] - S[-1,:], 'k--', label = 'Stratification')    
-    axs[0,0].title.set_text('Averaged salinity')
-    axs[0,0].set_xlabel(r'$X$')
-    axs[0,0].set_ylabel(r'$\bar{\Sigma}$')
-    axs[0,0].legend()
-    axs[0,0].grid(True)
-    
-    f1 = axs[1,0].contourf(Xp, sigmap, S, 50, cmap=cmap, corner_mask = True)
-    axs[1,0].contour(f1, levels = np.linspace(0,1,10), colors = 'k', linewidths = 0.5)
-    axs[1,0].contour(f1, levels = np.linspace(0,1,50), colors = 'k', linewidths = 0.5, l = 0.2)
-    #axs[1,0].title.set_text(f'Salinity: Negative = {SM.maskNEG} and Unstable = {SM.maskIS}')
-    axs[1,0].set_xlabel(r'$X$')
-    axs[1,0].set_ylabel(r'$\sigma$')
-    #if np.amin(S) < 0:
-        #axs[1,0].contourf(Xp, sigmap, S, levels = [np.amin(S), 0, np.amax(S)], cmap = cmap, corner_mask = True, hatches=["//", ""], l = 0)
-        #axs[1,0].contour(f1, levels = [0], colors='w', linewidths = 1.5)
-    plt.colorbar(f1, ax=axs[1,0])
-    
-    mag = np.sqrt(U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2)
-    f2 = axs[2,0].contourf(Xp, sigmap, U, 50, cmap = cmap, corner_mask = True)
-    axs[2,0].streamplot(Xp_interp[1:-1, 1:-1], sigmap[1:-1, 1:-1], U_interp[1:-1, 1:-1], W_interp[1:-1, 1:-1], density = 1, color='k', linewidth = mag/mag.max())
-    axs[2,0].title.set_text('Flow')
-    axs[2,0].set_xlabel(r'$X$')
-    axs[2,0].set_ylabel(r'$\sigma$')
-    axs[2,0].contour(f2, levels = [0], colors='w', linewidths = 1.5)
-    plt.colorbar(f2, ax=axs[2,0])  
-    
-    for t in range(len(TX)):
-        if t<7:
-            axs[0,1].plot(X, TX[t], label = labT[t], color = col[t])
-        else:
-            axs[0,1].plot(X, np.abs(TX[t]), '-.', label = labT[t], color = col[t])
-    axs[0,1].title.set_text('Salt transport')
-    axs[0,1].set_xlabel(r'$X$')
-    axs[0,1].set_ylabel('Relative contribution')
-    axs[0,1].legend()
-    axs[0,1].grid(True)
-    
-
-    # Change the bar colors here
-    SM.T[-1] = np.abs(SM.T[-1])
-    axs[1,1].bar(labT, SM.T, color=col)
-    axs[1,1].bar(labT[-1], SM.T[-1], color=col[-1], hatch = '//')
-    #axs[1,1].title.set_text('Integrated salt transport: Regime = '+ np.array2string(*SM.Reg))
-    #axs[1,1].set_xlabel(r'$X$')
-    axs[1,1].set_ylabel('Relative contribution')
-    axs[1,1].grid(True)
-
-    sbxmin = min([SM.Exx[1], np.min(Sb_X)])
-    sbxmax = max([SM.Exx[0], np.max(Sb_X)])
-
-    Sb_Xplot = np.linspace(sbxmin, sbxmax, 201)
-    Sbplot = np.polyval([SM.a/SM.d,SM.b/SM.d,SM.c/SM.d,0], Sb_Xplot)
-    
-    axs[2,1].plot(Sb_Xplot, Sbplot, ls = 'dotted', label = 'Curve')
-    axs[2,1].plot(Sb_X, Sb, lw = 2, label = 'Realised')
-    axs[2,1].scatter(SM.Exx, SM.Exy, marker = 'o', label = 'J = 0 or H = 0')
-    #axs[2,1].title.set_text(r'$\bar{\Sigma}_X - \bar{\Sigma}$ Curve - ' + f'Non-unique = {SM.maskNU}')
-    axs[2,1].set_xlabel(r'$\bar{\Sigma}_X$')
-    axs[2,1].set_ylabel(r'$\bar{\Sigma}$')
-    axs[2,1].grid(True)
-    axs[2,1].legend()
-    
-    # From here, we continue with PS
-    
-    
-def addC(R):
-    C = np.zeros(12)
-    if R != 'Inf':
-        C[0] = (19*R**2+285*R+1116)/(1451520*R**2 + 8709120*R + 13063680) #-P2P5
-        C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4
-        C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6
-        C[3] = (2*R**2)/(105*R**2 + 630*R + 945) #-P1P4
-        C[4] = (5*R**2+31*R)/(840*R**2 + 5040*R + 7560) #-P1P6 = -P3P4
-        C[5] = (R**2+11*R+32)/(1680*R**2 + 10080*R + 15120) #-P3P6
-
-        C[6] = -7/120*R/(R+3) #P4(0)
-        C[7] = -1/2880*(5*R+36)/(R+3) #P5(0)
-        C[8] = -1/240*(3*R+16)/(R+3) #P6(0)
-        C[9] = R/(R+3)*(-1/8 + 1/4 - 7/120) #P4(-1)
-        C[10] = 1/120 - (R+4)/(R+3)/64+(R+6)/(R+3)/96 + C[7]  #P5(-1)
-        C[11] = (R+2)/(R+3)/16 - 1/6 + (R+4)/(R+3)/8+C[8] #P6(-1)
-    
-    else:
-        C[0] = 19/1451520 #P2P5
-        C[1] = 2*19/40320 #P1P5 = P2P4
-        C[2] = 2*1/11520 #P3P5 = P2P6
-        C[3] = 2/105 #P1P4
-        C[4] = 2*1/336 #P1P6 = P3P4
-        C[5] = 1/1680 #P3P6
-
-        C[6] = -7/120 #P4(0)
-        C[7] = -1/576 #P5(0)
-        C[8] = -1/80 #P6(0)
-        C[9] = 1/15 #P4(-1)
-        C[10] = 1/720 #P5(-1)
-        C[11] = 1/120 #P6(-1) 
-    return C
-
-def formFunctions(sigmap, R):
-    if R != 'Inf':    
-        R3 = 1/(R+3)
-        P1 = R*R3*(1/2-3/2*sigmap**2)
-        P2 = 1/48*(R+6)*R3 - 3/16*R3*(R+4)*sigmap**2 - 1/6*sigmap**3
-        P3 = (R+4)*R3/4 + sigmap + 3*(R+2)*R3/4*sigmap**2
-        P4 = R*R3*(-7/120 + sigmap**2/4 - sigmap**4/8)
-        P5 = -(5*R+36)*R3/2880 + 1/96*R3*(R+6)*sigmap**2 - 1/64*(R+4)*R3*sigmap**4 - 1/120*sigmap**5
-        P6 = -1/240*R3*(3*R+16) + 1/8*R3*(R+4)*sigmap**2 + sigmap**3/6 + (R+2)*R3*sigmap**4/16
-        P7 = -1/48*(5*R+18)*R3 - 1/16*(R+4)*R3*sigmap**3 - 1/24*sigmap**4
-        
-    else:
-        P1 = -3/2*sigmap**2 + 1/2
-        P2 = -sigmap**3/6 - 3/16*sigmap**2 + 1/48
-        P3 = 3/4*sigmap**2 + sigmap + 1/4
-        P4 = -1/8*sigmap**4 + sigmap**2/4 - 7/120
-        P5 = -sigmap**5/120 - sigmap**4/64 + sigmap**2/96 - 1/576
-        P6 = sigmap**4/16 + sigmap**3/6 + sigmap**2/8 - 1/80
-        P7 = -5/48 - 1/24*sigmap**4 - 1/16*sigmap**3
-    
-    return P1, P2, P3, P4, P5, P6, P7
-
-#integral functions for computing transport terms
