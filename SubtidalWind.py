@@ -16,7 +16,7 @@ import sys
 np.seterr(divide = 'ignore') 
 #warnings.filterwarnings('ignore')
 plt.rcParams['axes.xmargin'] = 0
-gp = globalParameters(R = 2, Ori = True, nps = [1, 101, 31, 21]) #Setting parameters such as BC, alpha
+gp = globalParameters(R = 2, Ori = True, nps = [1, 101, 21, 21]) #Setting parameters such as BC, alpha
 
 '''
 dd, ndd = makeDicts(gp, 'tau_w')

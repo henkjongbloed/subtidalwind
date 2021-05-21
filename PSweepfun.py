@@ -43,7 +43,8 @@ class ParameterSweep:
     def solvePS(self):
         i = 0
         fac = 2.0
-        #incr = False
+        incr = False #Previously: Increased K_M
+        decr = False #Previously: Decreased K_M 
         #mixPar = initMixPar(gp)
         while i < self.n:
             #j = 0
@@ -58,16 +59,30 @@ class ParameterSweep:
                 self.Reg[i,:] = computeRegime(self.T[i,:])
                 self.LsT[i,:] = computeLsTheory(self.gp, self.L[i,:], self.Sb_0[i])
                 self.mask[i,3], self.mask[i,4] = computePhysicalMasksPS(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Ra[i], self.Fr[i], self.Fw[i], self.Sc, self.Sb_X0[i], self.rs[i])
-                #if incr = True:
-                #    fac = 
+                if incr == True: #Mixing was increased and now success: Maybe overestimated. Decrease again:
+                    prevRa, prevFw = self.Ra[i], self.Fw[i]
+                    fac = .9*fac
+                    self.Ra[i], self.Fw[i], self.mask[i,5]  = findMixing(1/fac, self.Ra[i], self.Fw[i])
+                    #print(self.Ra[i])
+                    incr = False
+                    decr = True
+                    #print(fac)
+                    if np.abs(prevRa-self.Ra[i])/prevRa > .01:
+                        continue
                 if any(self.mask[i,3:4]):
                     self.Ra[i], self.Fw[i], self.mask[i,6] = findMixing(fac, self.Ra[i], self.Fw[i])
+                    incr = True
+                    #print(self.Ra[i])
                     continue
             else: #Solution does not exist/is non-unique: Increase mixing.
+                prevRa, prevFw = self.Ra[i], self.Fw[i]
                 self.Ra[i], self.Fw[i], self.mask[i,5]  = findMixing(fac, self.Ra[i], self.Fw[i])
-                #incr = True
+                incr = True
+                #print(self.Ra[i])
                 continue
             i += 1 #Proceed to next parameter tuple, reset iterative parameters.
-            
+            incr, decr = False, False
+            fac = 2.0
+            #print(i)
         #self.mask[:,6] = np.count_nonzero(self.mask[:,0:6], axis = 1)
         return

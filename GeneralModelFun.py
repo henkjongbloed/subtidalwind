@@ -20,7 +20,7 @@ def globalParameters(**kwargs):
         tolPrit = 10, #not employed in current version of script.
         Sc = 2.2,
         m = 1.2, #tuning factor for mixing algorithm
-        Ori = True, #Plots 'Original' parameters instead of modified ones.
+        Ori = True, #Plots 'Original' parameters instead of modified ones. (now; only NonDim compatible)
         )
     
     gp['C'] = addC(gp['R'])
