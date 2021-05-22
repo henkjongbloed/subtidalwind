@@ -16,7 +16,7 @@ import sys
 np.seterr(divide = 'ignore') 
 #warnings.filterwarnings('ignore')
 plt.rcParams['axes.xmargin'] = 0
-gp = globalParameters(R = 2, Ori = True, nps = [1, 101, 31, 21]) #Setting parameters such as BC, alpha
+gp = globalParameters(R = 2, Ori = True, m = 1.02, nps = [1, 301, 21, 21]) #Setting parameters such as BC, alpha
 
 '''
 dd, ndd = makeDicts(gp, 'tau_w')
@@ -30,12 +30,42 @@ plotDim(PS, dd)
 
 # Hello World!
 '''
-for q in np.logspace(0,3,2):
-    dd, ndd = makeDicts(gp, 'tau_w', 'H', Q = q)
-    PS = ParameterSweep(gp, ndd, 1).run()
-    plotDim(PS, dd)
-    
-dd, ndd = makeDicts(gp, 'tau_w')
+dd, ndd = makeDicts(gp, 'tau_w', H = 500, name = 'Shallow')
+PS = ParameterSweep(gp, ndd, 1).run()
+plotDim(PS, dd)
+#plt.plot(np.sum(PS.T[:,0:6], axis = 1))
+'''
+plt.figure()
+plt.plot(PS.Reg[:,0], label = 'DI')
+plt.plot(PS.Reg[:,1], label = 'GG')
+plt.plot(PS.Reg[:,2], label = 'W')
+plt.plot(PS.mixIncrease, label = 'Mix')
+plt.plot(np.log10(PS.Ra), label = 'Ra')
+plt.plot(np.log10(PS.Fr), label = 'Fr')
+plt.plot(symlog10(PS.Fw), label = 'Fw')
+plt.plot(np.sum(PS.Reg, axis = 1))
+plt.legend()
+#plt.plot(np.sum(PS.T[:,0:6], axis = 1))
+
+
+plt.show()
+'''
+dd, ndd = makeDicts(gp, 'tau_w', name = 'Moderate')
+PS = ParameterSweep(gp, ndd, 1).run()
+plotDim(PS, dd)
+
+dd, ndd = makeDicts(gp, 'tau_w', 'H', name = 'Deep')
+PS = ParameterSweep(gp, ndd, 1).run()
+plotDim(PS, dd)
+
+#plt.show()
+
+#dd, ndd = makeDicts(gp, 'tau_w', 'K_M', H = 100, name = 'Deep')
+#PS = ParameterSweep(gp, ndd, 1).run()
+#plotDim(PS, dd)
+#plt.show()
+'''    
+dd, ndd = makeDicts(gp, 'K_M')
 PS = ParameterSweep(gp, ndd, 1).run()
 plotDim(PS, dd)
 
@@ -52,10 +82,10 @@ for (fr, ft, name) in zip(FrGuha, FtGuha, Est):
     ndd = makeNDDict(gp, 'Fw', Fr = fr, Ra = Ft2Ra(ft), name = name)
     PS = ParameterSweep(gp, ndd, 0).run()
     plotNDim(PS)
+'''
 
 
-
-plt.show()
+#plt.show()
 
 #Est = []
 #
@@ -82,4 +112,4 @@ EXr = [ex.run() for ex in EX]
 
 #PS3.run()
 '''
-#plt.show()
+plt.show()

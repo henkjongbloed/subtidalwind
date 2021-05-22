@@ -42,7 +42,7 @@ class ParameterSweep:
     
     def solvePS(self):
         i = 0
-        fac = 2.0
+        fac = self.gp['m']
         #incr = False
         #mixPar = initMixPar(gp)
         while i < self.n:
@@ -69,5 +69,7 @@ class ParameterSweep:
                 continue
             i += 1 #Proceed to next parameter tuple, reset iterative parameters.
             
+        print('Finished Experiment')
+        self.mixIncrease = self.RaOri/self.Ra
         #self.mask[:,6] = np.count_nonzero(self.mask[:,0:6], axis = 1)
         return

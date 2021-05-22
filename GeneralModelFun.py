@@ -15,8 +15,8 @@ def globalParameters(**kwargs):
         n = [1, 401, 31, 13], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
         SM = [1001,21], #Single model run: grid.
         PS = [51,11],
-        tolNEG = .1,
-        tolUN = .1,
+        tolNEG = 0,
+        tolUN = 0,
         tolPrit = 10, #not employed in current version of script.
         Sc = 2.2,
         m = 1.2, #tuning factor for mixing algorithm
@@ -136,7 +136,8 @@ def makeDicts(gp, *args, **kwargs):
     #Default sweep ranges: Independent variables.
     Q = np.logspace(0,3,n)
     H = np.logspace(0,2.5,n)
-    tau_w = np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
+    tau_w = invsymlog10(np.linspace(-1,1, n))#np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
+    #tau_w = np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
     
     # Make mixing dependent on H or tau_w, not the other way around!!
     if ('Ralston' not in kwargs) and ('Sverdrup' not in kwargs):
@@ -232,7 +233,8 @@ def makeNDDict(gp, *args, **kwargs):
     Fr = np.logspace(-4 , 0 , n)
     if n > 1:
         if n % 2 == 0: n = n + 1
-        Fw = np.concatenate((-np.logspace(1.5,-4, int((n-1)/2)), np.array([0]), np.logspace(-4,1.5,int((n-1)/2))))
+        Fw = invsymlog10(np.linspace(-1, 1, n))
+        #Fw = np.concatenate((-np.logspace(1.5,-4, int((n-1)/2)), np.array([0]), np.logspace(-4,1.5,int((n-1)/2))))
 
     if len(args) == 1:
         varx = eval(args[0])
@@ -563,10 +565,10 @@ def computeLsTheory(gp,L,Sb_0):
     
 #def initMixPar(gp):
     #mixPar = dict()
-def symlog10(x,l = 1/np.log(10)):
+def symlog10(x,l = 1/(100*np.log(100))):
     return np.sign(x)*np.log10(1.0 + np.abs(x/l))
     
-def invsymlog10(y,l = 1/np.log(10)):
+def invsymlog10(y,l = 1/(100*np.log(100))):
     return np.sign(y)*l*(-1.0 + 10**np.abs(y))
 
 
@@ -789,7 +791,8 @@ def plotDim1(PS, dimDict):
     
     fig, axs = plt.subplots(4,1, sharex = True)
     #fig.suptitle('Se)
-    plt.tight_layout()
+    plt.suptitle(dimDict['name'])
+    #plt.tight_layout()
 
     Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
     LDim = dimDict['K_H']/dimDict['c']
@@ -928,7 +931,6 @@ def plotDim2(PS, dimDict):
     
     for i in range(4):
         if 'tau_w' in namey:
-            #axs[i].set_xscale('symlog')
             axs[i].plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w') 
         #else:
             #axs[i].set_xlabel(namex)
