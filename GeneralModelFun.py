@@ -136,9 +136,8 @@ def makeDicts(gp, *args, **kwargs):
     #Default sweep ranges: Independent variables.
     Q = np.logspace(0,3,n)
     H = np.logspace(0,2.5,n)
-    tau_w = invsymlog10(np.linspace(-1,1, n))#np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
-    #tau_w = np.concatenate((-np.logspace(0,-5, int((n-1)/2)), np.array([0]), np.logspace(-5,0,int((n-1)/2))))
-    
+    tau_w = invsymlog10(np.linspace(-1,1, n))
+    print(tau_w)
     # Make mixing dependent on H or tau_w, not the other way around!!
     if ('Ralston' not in kwargs) and ('Sverdrup' not in kwargs):
         K_M = np.logspace(-6,0,n)
@@ -234,7 +233,6 @@ def makeNDDict(gp, *args, **kwargs):
     if n > 1:
         if n % 2 == 0: n = n + 1
         Fw = invsymlog10(np.linspace(-1, 1, n))
-        #Fw = np.concatenate((-np.logspace(1.5,-4, int((n-1)/2)), np.array([0]), np.logspace(-4,1.5,int((n-1)/2))))
 
     if len(args) == 1:
         varx = eval(args[0])
@@ -565,10 +563,10 @@ def computeLsTheory(gp,L,Sb_0):
     
 #def initMixPar(gp):
     #mixPar = dict()
-def symlog10(x,l = 1/(100*np.log(100))):
+def symlog10(x,l = 1/(50*np.log(10))):
     return np.sign(x)*np.log10(1.0 + np.abs(x/l))
     
-def invsymlog10(y,l = 1/(100*np.log(100))):
+def invsymlog10(y,l = 1/(50*np.log(10))):
     return np.sign(y)*l*(-1.0 + 10**np.abs(y))
 
 
@@ -1201,6 +1199,9 @@ def addC(R):
         C[9] = R/(R+3)*(-1/8 + 1/4 - 7/120) #P4(-1)
         C[10] = 1/120 - (R+4)/(R+3)/64+(R+6)/(R+3)/96 + C[7]  #P5(-1)
         C[11] = (R+2)/(R+3)/16 - 1/6 + (R+4)/(R+3)/8+C[8] #P6(-1)
+        
+        Sc = 2.2
+        print(Sc*C)
     
     else:
         C[0] = 19/1451520 #P2P5

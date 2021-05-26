@@ -30,7 +30,7 @@ plotDim(PS, dd)
 
 # Hello World!
 '''
-dd, ndd = makeDicts(gp, 'tau_w', H = 500, name = 'Shallow')
+dd, ndd = makeDicts(gp, 'tau_w', H = 5, name = 'Shallow')
 PS = ParameterSweep(gp, ndd, 1).run()
 plotDim(PS, dd)
 #plt.plot(np.sum(PS.T[:,0:6], axis = 1))
@@ -50,7 +50,7 @@ plt.legend()
 
 plt.show()
 '''
-dd, ndd = makeDicts(gp, 'tau_w', name = 'Moderate')
+dd, ndd = makeDicts(gp, 'tau_w', H = 30, name = 'Moderate')
 PS = ParameterSweep(gp, ndd, 1).run()
 plotDim(PS, dd)
 
@@ -64,7 +64,7 @@ plotDim(PS, dd)
 #PS = ParameterSweep(gp, ndd, 1).run()
 #plotDim(PS, dd)
 #plt.show()
-'''    
+    
 dd, ndd = makeDicts(gp, 'K_M')
 PS = ParameterSweep(gp, ndd, 1).run()
 plotDim(PS, dd)
@@ -82,7 +82,7 @@ for (fr, ft, name) in zip(FrGuha, FtGuha, Est):
     ndd = makeNDDict(gp, 'Fw', Fr = fr, Ra = Ft2Ra(ft), name = name)
     PS = ParameterSweep(gp, ndd, 0).run()
     plotNDim(PS)
-'''
+
 
 
 #plt.show()
