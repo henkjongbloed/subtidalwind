@@ -137,7 +137,9 @@ def makeDicts(gp, *args, **kwargs):
     Q = np.logspace(1,4, n)
     H = np.logspace(0,2.5, n)
     if 'tau_w' in args:
-        tau_w  = np.array(invsymlog10(np.linspace(symlog10(-0.3), symlog10(0.3), n)))
+        tau_w  = np.array(invsymlog10(np.linspace(symlog10(-1), symlog10(1), n)))
+        if 'tauwLim' in kwargs:
+            tau_w  = np.array(invsymlog10(np.linspace(symlog10(kwargs['tauwLim'][0]), symlog10(kwargs['tauwLim'][1]), n)))
         if 'dir' in kwargs:
             if kwargs['dir'] == 'Down':
                 tau_w = np.array(invsymlog10(np.linspace(symlog10(0), symlog10(0.3), n)))
@@ -148,6 +150,15 @@ def makeDicts(gp, *args, **kwargs):
     #if ('Ralston' not in kwargs) and ('Sverdrup' not in kwargs):
     K_M = np.logspace(-4,0,n)
     K_H = np.logspace(0,5,n)
+    
+    if 'Guha' in kwargs:
+        if kwargs['Guha']:
+            dd['K_M'] = Guha(dd['H'], dd['B'], dd['K_H'])
+            print(f"Mixing = {dd['K_M']}")
+    if 'Sverdrup' in kwargs: # In this case, make K_M dependent on tau_w following Kullenberg 1976
+        if kwargs['Sverdrup']:
+            omega = kwargs['Sverdrup']/(2.6e-3*1.225) # Change this coefficient to tune wind.
+            dd['K_M'] = Sverdrup(tau_w, dd['K_M'], omega)
     #elif 'Ralston' in kwargs:
     #   K_M, K_H = Ralston(kwargs['Ralston'], H, dd['B'])
     #    if 'Sverdrup' in kwargs:
@@ -210,6 +221,14 @@ def makeDicts(gp, *args, **kwargs):
     return dd, ndd
 
 def makeNDDict(gp, *args, **kwargs):
+    '''Makes nondimensional parameter Dict with default initial values.
+    
+    makeNDDict(gp, args, kwargs)
+    
+    Inserting args yields a variation for that argument
+    
+    Inserting kwargs yields fixed value for that variable, and limitations of the varying variables. '''
+    
     dd = defaultDim(gp)
     ndd = dim2nondim(dd) #Default, also for nonDim model run.
     
@@ -285,7 +304,12 @@ def makeNDDict(gp, *args, **kwargs):
     ndd['n'] = n
     return ndd
 
-def Ralston(u_T, H, B):
+def Guha(H, B, K_H): # Co
+    K_M = 0.00208*K_H*H/B
+    return K_M
+
+
+def Banas(u_T, H, B):
     K_M = 0.028*0.0026*u_T*H
     K_H = 0.035*u_T*B
     return K_M, K_H
@@ -500,7 +524,7 @@ def computeU(gp, Ra, Fr, Fw, P, Sb_X, Sb_XX):
     #temp = np.transpose(Sb)# np.matlib.repmat(np.transpose(Sb),nsigma,1) -> Start here!!!!
     #print(temp)
     U =  Ubar + UR + UG + UW
-    W = -P[6]*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) # In this, we have scaled with K_M/c * Ra**2
+    W = -P[6]*Ra**2*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) # In this, we have assumed the vertical velocity scale K_M / H
     return U, W, Ubar, UR, UG, UW
 
 def computeNU(D2, Exx, Sb_X0, rs):
@@ -682,10 +706,10 @@ def addC(R):
     C = np.zeros(12)
     if R != 'Inf':
         C[0] = (19*R**2+285*R+1116)/(1451520*R**2 + 8709120*R + 13063680) #-P2P5
-        C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4
-        C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6
+        C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4 (sum)
+        C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6 (sum)
         C[3] = (2*R**2)/(105*R**2 + 630*R + 945) #-P1P4
-        C[4] = (5*R**2+31*R)/(840*R**2 + 5040*R + 7560) #-P1P6 = -P3P4
+        C[4] = (5*R**2+31*R)/(840*R**2 + 5040*R + 7560) #-P1P6 = -P3P4 (sum)
         C[5] = (R**2+11*R+32)/(1680*R**2 + 10080*R + 15120) #-P3P6
 
         C[6] = -7/120*R/(R+3) #P4(0)
@@ -694,7 +718,7 @@ def addC(R):
         C[9] = R/(R+3)*(-1/8 + 1/4 - 7/120) #P4(-1)
         C[10] = 1/120 - (R+4)/(R+3)/64+(R+6)/(R+3)/96 + C[7]  #P5(-1)
         C[11] = (R+2)/(R+3)/16 - 1/6 + (R+4)/(R+3)/8+C[8] #P6(-1)
-        
+        print(f'D4 = {C[9]-C[6]} and D5 = {C[10]-C[7]} and D6 = {C[11]-C[8]} and quot = {(C[9]-C[6])/(C[11]-C[8])}')
         #Sc = 2.2
         #print(Sc*C)
     

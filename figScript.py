@@ -62,9 +62,31 @@ for fr in [1e-3, 1e-2, 1e-1]:
     #print(np.sum(PS.mask[:,4]))
 #plt.plot(np.sum(PS.T[:,0:6], axis = 1))
 
+#Res2
+PSList = []
+
+i = 0
+
+for fr in [0.00025, 0.0025, 0.025, 0.1]:
+        ndd = makeNDDict(gp, 'Fw', 'Ra', Fr = fr, name = 'fr')
+        PSList.append(ParameterSweep(gp, ndd, 0).run())
+        #plotNDim(pp, PSList[i])
+        i += 1
+
+plotReg4(pp, PSList)
 
 
+PSList = []
 
+i = 0
+
+for fw in [-.25, 0, .25, 1]:
+        ndd = makeNDDict(gp, 'Ra', 'Fr', Fw = fw, name = 'fr')
+        PSList.append(ParameterSweep(gp, ndd, 0).run())
+        #plotNDim(pp, PSList[i])
+        i += 1
+
+plotReg4(pp, PSList)
 # Sensitivity to epsilon
 
 for q in [1/3, 1/30, 1/300, 1/3000]:
@@ -191,5 +213,170 @@ for (fr, ra, name) in zip(FrD, RaD, Est):
 
 plotNDimEst(PS)
 
+#Paper: Draft 2
+
+'''
+"X" #No solution for Sb_X0, 
+"/" #No solution for Xs, 
+"+" #Non-unique solution (loc. extr.)
+"."  #neg. sal
+"O" #unstable strat
+'''
+PSList = []
+'''
+i = 0
+
+for fr in [.0025, .025, .25, 1]:
+        ndd = makeNDDict(gp, 'Fw', 'Ra', Fr = fr, name = 'fr')
+        PSList.append(ParameterSweep(gp, ndd, 0).run())
+        plotNDim(pp, PSList[i])
+        i += 1
+'''
+#plotReg4(pp, PSList)
+PSDList, dimDictList=[],[]
+gp['mixAway'] = True
+q = [500, 1300]
+h = [30, 22]
+kh = [1000, 150]
+km = [1e-2, 5e-4]
+twl = [[-3,3], [-.5, .5]]
+for i in [0,1,2]:
+        dd, ndd = makeDicts(gp, 'tau_w', Q = q[i], K_H = kh[i], K_M = km[i],H=h[i], tauwLim = twl[i])
+        PSDList.append(ParameterSweep(gp, ndd, 1).run())
+        dimDictList.append(dd)
+#plotDim(pp,PS,dd)
+
+gp['mixAway'] = False
+for i in [0,1]:
+        nddN= makeNDDict(gp, 'Fw', 'Ra', Fr = PSDList[i].Fr[0], name = 'fr')
+        PSList.append(ParameterSweep(gp, nddN, 1).run())
+plotDimNDim(pp, PSDList, dimDictList, PSList)
+'''
+
+Ravec = [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4]
+Fwvec =  [-1, -.25, 0, .25, 1, 2, 8]   #symlog10(np.linspace(invsymlog10(-10), invsymlog10(10), 11))
+SM = [SingleNonDim(gp, makeNDDict(gp, Ra = ra, Fr = 1e-2, Fw = fw)).run() for ra,fw in zip(Ravec,Fwvec)]
+plotCubics(pp,SM)
+
+
+'''
+
+
+
+# Figs Draft3
+
+pp = plotParameters(hatches = False,
+        mask = ~gp['mixAway'],
+        We = False)
+
+
+PSList = []
+
+i = 0
+
+
+
+
+for fr in [0.00025, 0.0025, 0.025, 0.1]:
+        ndd = makeNDDict(gp, 'Fw', 'Ra', Fr = fr, name = 'fr')
+        PSList.append(ParameterSweep(gp, ndd, 0).run())
+        plotNDim(pp, PSList[i])
+        i += 1
+
+plotReg4(pp, PSList)
+
+
+
+PSDList, PSList, dimDictList=[],[],[]
+gp['mixAway'] = False
+q = [1000, 1000, 1000]
+h = [10, 18 , 50]
+kh = [150, 150, 150]
+km = [2e-2, 2e-2, 2e-2]
+twl = [[-.5, 8], [-.5, 8], [-.5, 8]]
+si = [0,1,2]
+for i in si:
+        dd, ndd = makeDicts(gp, 'tau_w', Q = q[i], K_H = kh[i], K_M = km[i],H=h[i], tauwLim = twl[i])
+        PSDList.append(ParameterSweep(gp, ndd, 1).run())
+        dimDictList.append(dd)
+        #print(f"Regimes: H = {dimDictList[i]['H']}.")
+#plotDim(pp,PS,dd)
+
+gp['mixAway'] = False
+for i in si:
+        nddN = makeNDDict(gp, 'Fw', 'Ra', Fr = PSDList[i].Fr[0], name = 'fr')
+        PSList.append(ParameterSweep(gp, nddN, 1).run())
+        
+        
+plotDimNDim(pp, PSDList, dimDictList, PSList)
+
+
+PSList = []
+
+i = 0
+
+PSDList, PSList, dimDictList=[],[],[]
+gp['mixAway'] = False
+q = [1000, 1000, 1000]
+h = [10, 18 , 50]
+kh = [150, 150, 150]
+km = [2e-2, 2e-2, 2e-2]
+twl = [[-.5, 8], [-.5, 8], [-.5, 8]]
+si = [0,1,2]
+for i in si:
+        dd, ndd = makeDicts(gp, 'tau_w', Q = q[i], K_H = kh[i], K_M = km[i],H=h[i], tauwLim = twl[i], Sverdrup = 0.135/10, Guha = True)
+        PSDList.append(ParameterSweep(gp, ndd, 1).run())
+        dimDictList.append(dd)
+        #print(f"Regimes: H = {dimDictList[i]['H']}.")
+#plotDim(pp,PS,dd)
+
+gp['mixAway'] = False
+for i in si:
+        nddN = makeNDDict(gp, 'Fw', 'Ra', Fr = PSDList[i].Fr[0], name = 'fr')
+        PSList.append(ParameterSweep(gp, nddN, 1).run())
+        
+        
+plotDimNDim(pp, PSDList, dimDictList, PSList)
+
+Ras = [1000, 5e4]
+Fws = [1.7, -.5]
+
+for ra, fw in zip(Ras, Fws):
+    ndd = makeNDDict(gp, Ra = ra, Fr = 0.025, Fw = fw)
+    SM = SingleNonDim(gp, ndd).run()
+    plotModel3(pp,SM)
 
 plt.show()
+
+
+## Discussion Fig (final version)
+
+PSList = []
+
+i = 0
+
+PSDList, PSList, dimDictList=[],[],[]
+gp['mixAway'] = False
+q = [1000, 1000, 1000]
+h = [10, 18 , 50]
+kh = [160, 160, 160]
+km = [2e-2, 2e-2, 2e-2]
+twl = [[-.5, 8], [-.5, 8], [-.5, 8]]
+si = [0,1,2]
+sv = [0, 1e-5, 2e-4]
+
+for i in si:
+        for j in sv:
+                dd, ndd = makeDicts(gp, 'tau_w', Q = q[i], K_H = kh[i], K_M = km[i],H=h[i], tauwLim = twl[i], Sverdrup = j, Guha = False)
+                PSDList.append(ParameterSweep(gp, ndd, 1).run())
+                dimDictList.append(dd)
+        #print(f"Regimes: H = {dimDictList[i]['H']}.")
+#plotDim(pp,PS,dd)
+
+gp['mixAway'] = False
+for i in si:
+        nddN = makeNDDict(gp, 'Fw', 'Ra', Fr = PSDList[3*i].Fr[0], name = 'fr')
+        PSList.append(ParameterSweep(gp, nddN, 1).run())
+        
+        
+plotDimNDim(pp, PSDList, dimDictList, PSList)

@@ -15,7 +15,7 @@ params = {#'text.usetex' : True,
         'font.serif' : 'Utopia',
         'axes.xmargin' : 0,
         }
-plt.rcParams.update(params) 
+plt.rcParams.update(params)
 
 x = np.linspace(0,10,100)
 y = x**2

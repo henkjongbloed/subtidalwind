@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.core.arrayprint import array2string
+from numpy.testing._private.utils import jiffies
 from scipy.interpolate import griddata
 from matplotlib.animation import FuncAnimation
 from matplotlib import ticker, cm
@@ -71,13 +72,13 @@ def plotSpace(SM, PS, PSd):
     ax.set_zlabel('Fw')    
     ax.set_title(r'Slice: $\tau_w - H$, color: $\Phi_0$, max = ' + np.array2string(np.amax(col)))
     
-def plotDim(PS, dimDict):
+def plotDim(pp, PS, dimDict):
     if len(dimDict['pars']) == 1:
-        plotDim1(PS,dimDict)
+        plotDim1(pp,PS,dimDict)
     elif len(dimDict['pars']) == 2:
-        plotDim2(PS,dimDict)
+        plotDim2(pp, PS,dimDict)
     elif len(dimDict['pars']) == 3:
-        plotDim3(PS,dimDict)
+        plotDim3(pp, PS,dimDict)
         
 def plotNDim(pp, PS):
     ndd = PS.nondimDict
@@ -158,6 +159,9 @@ def plotNDim1(pp,PS):
     axs[2].title.set_text('Transports')
     axs[2].set_xlabel(ndd['pars'][0])
 
+
+
+
 def plotNDim2(pp,PS):
     ndd = PS.nondimDict
     namex, namey = ndd['pars']
@@ -199,7 +203,12 @@ def plotNDim2(pp,PS):
     maxUN = np.squeeze(PS.maxUN[:,0])
     mixFac = np.log10(np.squeeze(PS.mixIncrease))
     #print(mixFac)
-
+    
+    FwT = ['-1', '0', '.5', '2', '8']
+    tauwT = ['-.5', '0', '.5', '3']
+    
+    FwV = symlog10(np.array([-1,0,.5,2,8]))
+    tauwV = symlog10(np.array([-.5, 0, .5, 3]))
 
     
     if 'Fw' in namex:
@@ -284,11 +293,11 @@ def plotNDim2(pp,PS):
 
         if pp['hatches']:
             #if a==0:
-            ax.contourf(varx, vary, PS.maskOri[:,0].reshape(PS.nps), 1, hatches =  [None,"X"], alpha = 0)
-            ax.contourf(varx, vary, PS.maskOri[:,1].reshape(PS.nps), 1, hatches =  [None,"/"], alpha = 0)
-            ax.contourf(varx, vary, PS.maskOri[:,2].reshape(PS.nps), 1, hatches =  [None,"+"], alpha = 0)
-            ax.contourf(varx, vary, PS.maskOri[:,3].reshape(PS.nps), 1, hatches =  [None,"."], alpha = 0)
-            ax.contourf(varx, vary, PS.maskOri[:,4].reshape(PS.nps), 1, hatches =  [None,"O"], alpha = 0) 
+            ax.contourf(varx, vary, PS.maskOri[:,0].reshape(PS.nps), 1, hatches =  [None, "X"], alpha = 0) #No solution for Sb_X0
+            ax.contourf(varx, vary, PS.maskOri[:,1].reshape(PS.nps), 1, hatches =  [None, "/"], alpha = 0) #No solution for Xs
+            ax.contourf(varx, vary, PS.maskOri[:,2].reshape(PS.nps), 1, hatches =  [None, "+"], alpha = 0) #Non-unique solution (loc. extr.)
+            ax.contourf(varx, vary, PS.maskOri[:,3].reshape(PS.nps), 1, hatches =  [None, "."], alpha = 0) #neg. sal
+            ax.contourf(varx, vary, PS.maskOri[:,4].reshape(PS.nps), 1, hatches =  [None, "O"], alpha = 0) #unstable strat
         #plt.yticks([-4,-3,-2,-1,0,1,2,3,4,5,6], ['$10^{-4}$','$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$', '$10^1$', '$10^2$', '$10^3$', '$10^4$', '$10^5$', '$10^6$'])
         #if a not in [3,4,5]:
             
@@ -311,7 +320,7 @@ def plotNDim2(pp,PS):
             FwVal = invsymlog10(np.linspace(np.amin(varx), np.amax(varx), numTicks))
             FwTicks = []
             for t in range(numTicks): FwTicks.append(f'{FwVal[t]:1.1f}')
-            plt.xticks(np.linspace(np.amin(varx), np.amax(varx), numTicks), FwTicks)
+            plt.xticks(FwV, FwT)
             #print(invsymlog10(np.linspace(np.amin(varx), np.amax(varx), 11)))
             #print(type(invsymlog10(np.linspace(np.amin(varx), np.amax(varx), 11))))
             #print(np.linspace(symlog10(np.amin(varx)), symlog10(np.amax(varx)), 11))
@@ -556,6 +565,160 @@ def plotNDim22(pp,PS):
         elif 'Fr' in namey:
             plt.yticks([-4,-3,-2,-1,0], ['$10^{-4}$','$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
 
+def plotDimNDim(pp, PSDList, dimDictList, PSList):
+    '''Last figure of discussion. Purpose: show trajectory of dimensionless numbers obtained from a dimensional simulation.'''
+    col = ['tab:green','tab:green', 'tab:orange', 'tab:green','tab:orange','tab:orange', 'tab:blue', 'tab:gray']
+    ls = ['-', '--', '--', '-.', '-.', '-', '-', '-']    
+    labT = ['GG', 'GR', 'GW', 'RR', 'RW', 'WW', 'D', '|FL|']
+    namex, Phi_0, LsDim, varx, Regcolor, extentp, extentld, LDd, LGGd, LWWd, LGWd = PSD2Plot(PSDList[0], dimDictList[0])
+    fig = plt.figure(constrained_layout=True)
+    fig.tight_layout()
+    s4 = fig.add_gridspec(ncols = 3, nrows = 3)
+    
+    FwT = ['-1', '0', '2', '8']
+    tauwT = ['-.5', '0', '.5', '3']
+    
+    FwV = symlog10(np.array([-1,0,2,8]))
+    tauwV = symlog10(np.array([-.5, 0, .5, 3]))
+    ls = ['-', '--', ':']
+    for i in range(3):
+        for j in range(3):
+            #di = 3*i+j
+            ax = fig.add_subplot(s4[i,j]) #TODO: add mask to plotted quantities (stop in grey area)
+            # Left plot
+            if j==0:
+                RegcolorN, varxN, varyN = PS2Reg(pp, PSList[i]) # Dimensionless
+                cfig = ax.imshow(RegcolorN, extent = (np.amin(varxN), np.amax(varxN), np.amin(varyN), np.amax(varyN)), origin = 'lower', aspect = 'auto')
+                lsi = 0
+                for di in [3*i,3*i+1, 3*i+2]:
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld, _, _, _, _ = PSD2Plot(PSDList[di], dimDictList[di])            
+                    nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
+                    FwR = np.ma.masked_outside(symlog10(PSDList[di].Fw[nm]), symlog10(-1), symlog10(8)) # Dimensional
+                    RaR = np.ma.masked_outside(np.log10(PSDList[di].Ra[nm]), np.log10(25), 5)# Dimensional
+                    if i==0:
+                        ax.set_title(f"Regimes: H = {dimDictList[3*i]['H']} m")
+                    else:
+                        ax.set_title(f"H = {dimDictList[3*i]['H']} m")
+                    ax.plot(FwR, RaR, lw = 2, ls = ls[lsi], c = 'k') #Here, we assume Fw on x axis and Ra on y            ax.set_title(f"Regimes")
+                    lsi += 1
+                ax.plot([0,0], [np.amin(varyN), np.amax(varyN)], c = 'w', lw = .5, ls = ':') #look at this!!!
+            # Right plot
+            if j==1:
+                lsi = 0
+                for di in [3*i,3*i+1, 3*i+2]:
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot(PSDList[di], dimDictList[di])
+                    nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
+                    Regcolor[Regcolor<0] = 0
+                    Regcolor[Regcolor>1] = 1
+                    plt.scatter(varx[nm], Phi_0[nm], c = np.reshape(Regcolor[0,nm,:],[sum(nm),3]) , edgecolor = 'none')
+                    ax.plot(varx[nm], Phi_0[nm], c = 'k', ls = ls[lsi])
+                    lsi += 1
+                    ax.plot([0,0], [extentp[2], extentp[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
+                ax.set_ylabel(r'$\Phi_0$')
+                plt.grid(True)
+            # Right plot
+            if j==2:
+                lsi=0
+                for di in [3*i,3*i+1, 3*i+2]:
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot(PSDList[di], dimDictList[di])
+                    nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)       
+                    Regcolor[Regcolor<0] = 0
+                    Regcolor[Regcolor>1] = 1
+                    ax.scatter(varx[nm], LsDim[nm], c = np.reshape(Regcolor[0,nm,:],[sum(nm),3]) , edgecolor = 'none')
+                    ax.plot(varx[nm], LsDim[nm], c = 'k', ls = ls[lsi])
+                    lsi += 1
+                    #ls = '--'
+                    ax.plot([0,0], [extentld[2], extentld[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
+                ax.set_yscale('log')
+                ax.set_ylabel(r'$L_s [m]$')
+                plt.grid(True)
+                #if 'tau_w' in namex:
+                    #plt.xticks(np.linspace(np.amin(varx), np.amax(varx), 5), FwTicks)
+            if i in [0,1]:
+                plt.setp(ax.get_xticklabels(), visible = False)
+                
+            if [i,j]==[2,0]: ax.set_xlabel(r'Fw')
+            if [i,j] in [[2,1], [2,2]]:
+                ax.set_xlabel(r'$\tau_w$')
+            if [i,j] == [0,2]:
+                ax.title.set_text(r'Salt intrusion $L_s$')
+            if [i,j] == [0,1]:
+                ax.title.set_text(r'Stratification $\Phi_0$')
+            if j==0: 
+                ax.set_ylabel(r'Ra')
+                plt.yticks([2,3,4,5], ['$10^2$', '$10^3$', '$10^4$', '$10^5$'])
+                plt.xticks(FwV, FwT)
+            else:
+                plt.xticks(tauwV, tauwT)
+
+def PSD2Plot(PS, dimDict):
+    namex = dimDict['pars'][0]
+
+    LsT = PS.LsT
+
+    Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
+    LDim = dimDict['K_H']/dimDict['c']
+    LsDim = Ls*LDim
+
+    if namex == 'tau_w':
+        varx = symlog10(dimDict[namex])
+    else:
+        varx = np.log10(dimDict[namex])
+
+    Regcolor = np.array([Reg, Reg])
+    extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
+    #print(extentp)
+    Ll, Lu = np.amin(Ls)/1.25, 1.25*np.amax(Ls)
+    extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
+    LlDim, LuDim = np.amin(Ll*LDim)/1.25, np.amax(Lu*LDim)*1.25
+    extentld = (np.amin(varx), np.amax(varx), LlDim, LuDim)
+    #x, y = x.ravel(), y.ravel()
+    
+    LD = np.ma.masked_outside(LsT[:,6], Ll, Lu)
+    LGG = np.ma.masked_outside(LsT[:,0], Ll, Lu)
+    LWW = np.ma.masked_outside(LsT[:,5], Ll, Lu)
+    LGW = np.ma.masked_outside(LsT[:,-1], Ll, Lu)
+    LsDim = np.ma.masked_outside(LsDim, LlDim, LuDim) 
+    LDd = LD*LDim
+    LGGd =  LGG*LDim
+    LWWd = LWW*LDim
+    LGWd = LGW*LDim
+    return namex,Phi_0,LsDim,varx,Regcolor,extentp,extentld,LDd,LGGd,LWWd,LGWd
+
+def PS2Reg(pp, PS):
+    ndd = PS.nondimDict
+    namexN, nameyN = ndd['pars']
+    if PS.gp['Ori']:
+        namexN, nameyN = namexN+'Ori', nameyN+'Ori'
+    cmap = cm.get_cmap("Blues").copy()
+            #print(cmap.get_bad())
+    cmap.set_bad(color = 'gray', alpha = .5)
+            #print(cmap.get_bad())
+
+            #fig, axs = plt.subplots(3,1, sharex = True)
+    nps = PS.nps
+    if pp['mask']:
+        RegN = np.squeeze(PS.Reg)
+        RegcolorN = np.swapaxes(np.reshape(RegN, (*nps, 3)), 0, 1)
+    else:
+        RegN = np.squeeze(PS.Reg)
+        RegcolorN = np.swapaxes(np.reshape(RegN, (*nps, 3)), 0, 1)
+
+            
+    if 'Fw' in namexN:
+        if pp['We']:
+            varxN = symlog10(PS.We0.reshape(nps))
+                    #print(np.amax(varx))
+                    #print(np.amin(varx))
+        else:
+            varxN= symlog10(getattr(PS, namexN).reshape(nps))
+    else:
+        varxN = np.log10(getattr(PS, namexN).reshape(nps))
+    if 'Fw' in nameyN:
+        varyN = symlog10(getattr(PS, nameyN).reshape(nps))
+    else:
+        varyN = np.log10(getattr(PS, nameyN).reshape(nps))
+    return RegcolorN,varxN,varyN
 
 
 def plotNDim2Data(pp,PS):
@@ -1210,7 +1373,7 @@ def plotModel3(pp,SM):
             ax.contour(a1, levels = np.linspace(0,1,10), colors = 'k', linewidths = 0.5)
             ax.plot(X, Sb - 1, 'w', lw = 2, ls = '-.')
             ax.set_title(r'Salinity $\Sigma(X,\sigma)$ and $\bar{\Sigma}(X)$')
-            cb=plt.colorbar(a1, ax=ax)
+            cb = plt.colorbar(a1, ax=ax)
             cb.set_ticks([0.0, .2, .4, .6, .8, 1.0])
         if sp == 1:
             lev =  np.linspace(np.amin(U) ,np.amax(U),10)
@@ -1219,21 +1382,21 @@ def plotModel3(pp,SM):
             ax.set_title(r'Flow $U(X,\sigma)$')
             cb=plt.colorbar(a2, ax=ax)
             tic = np.linspace(np.amin(U), np.amax(U), 6)
-            print(tic)
+            #print(tic)
             cb.set_ticks(tic)
             cb.set_ticklabels(["%.3f" % ti for ti in tic])
         if sp == 2:
-            ax.plot(X, np.abs(TX[7]), label = labT[7], color = col[7], ls = ls[7])
+            ax.plot(X, -np.abs(TX[7]), label = labT[7], color = col[7], ls = ls[7])
             for t in range(len(TX)-1):
                 ax.plot(X, TX[t], label = labT[t], color = col[t], ls = ls[t])
-                    
-            ax.title.set_text(r'Scaled salt transports $T_i(X)$')
+            ax.title.set_text(r'Scaled salt transport mechanisms')
             ax.set_xlabel(r'$X$')
-            ax.set_ylabel('Rel. magnitude')
+            ax.set_ylabel('Relative magn.')
             ax.grid(True)
-        ax.set_ylabel(r'$\sigma$')
         if sp in[0,1]:
-            ax.set_yticks([0, -.25, -.5, -.75, -1])
+            ax.set_yticks([0, -.5, -1])
+            ax.set_ylabel(r'$\sigma$')
+            plt.setp(ax.get_xticklabels(), visible=False)
         else:
             #ax.set_yticks([0, .25, .5, .75, 1])
             pass
@@ -1437,6 +1600,10 @@ def plotCubics(pp,SMT):
     
     #SM = SMT[i]
     #ax = fig.add_subplot(s[i])
+    #FwVec = []
+    #for SM in SMT:
+        #FwVec.append(SM.Fw)
+    
     for SM in SMT:
         try: 
             sbxmin = min([SM.Exx[0], SM.Exx[1], SM.Exx[2], np.min(SM.Sb_X)])
@@ -1444,16 +1611,18 @@ def plotCubics(pp,SMT):
 
             Sb_Xplot = np.linspace(sbxmin, sbxmax, 201)
             Sbplot = np.polyval([SM.a/SM.d,SM.b/SM.d,SM.c/SM.d,0], Sb_Xplot)
-    
+
             plt.plot(Sb_Xplot, Sbplot, c = 'k', ls = 'dotted', lw = .5)
             plt.scatter(SM.Exx, SM.Exy, c = 'k', marker = 'o')
-            plt.plot(SM.Sb_X, SM.Sb, lw = 1.5, label = f'$Fw$ = {SM.Fw:.1f}')
+            if SM.Fw==-1:
+                SM.Reg = np.array([.7,.7,.7])
+            plt.plot(SM.Sb_X, SM.Sb, lw = 1.5, label = f'$Fw$ = {SM.Fw:.2f}', c = SM.Reg)
         except:
             pass
     plt.xlabel(r'$\bar{\Sigma}_X$')
     plt.ylabel(r'$\bar{\Sigma}$')
     plt.title(r'Cubic curves, varying $Fw$')
-    plt.xlim([0, 1e-4])
+    plt.xlim([0, 1e-3])
     plt.ylim([0, 1])
     plt.grid(True)
     plt.legend()
@@ -1529,3 +1698,236 @@ def plotNDimEst(pp,PST):
 
         plt.xticks(np.linspace(np.amin(varx), np.amax(varx), nt), FwTicks)
         i=i+1
+        
+def plotReg4(pp, PSList):
+    a = 0
+    
+    fig = plt.figure(constrained_layout=True)
+    #s3 = fig.add_gridspec(ncols=3, nrows=2)
+    s3 = fig.add_gridspec(ncols = 2, nrows = 2)
+
+    FwT = ['-1', '0', '.5','2', '8']
+    tauwT = ['-.5', '0', '.5', '3']
+    
+    FwV = symlog10(np.array([-1,0, .5, 2,8]))
+    tauwV = symlog10(np.array([-.5, 0, .5, 3]))
+
+    for PS in PSList:
+        ndd = PS.nondimDict
+        namex, namey = ndd['pars']
+        if PS.gp['Ori']:
+            namex, namey = namex+'Ori', namey+'Ori'
+        cmap = cm.get_cmap("Blues").copy()
+        #print(cmap.get_bad())
+        cmap.set_bad(color = 'gray', alpha = .5)
+        #print(cmap.get_bad())
+
+        #fig, axs = plt.subplots(3,1, sharex = True)
+        nps = PS.nps
+        if pp['mask']:
+            Reg = np.squeeze(PS.Reg)
+            Regcolor = np.swapaxes(np.reshape(Reg, (*nps, 3)), 0, 1)
+        else:
+            Reg = np.squeeze(PS.Reg)
+            Regcolor = np.swapaxes(np.reshape(Reg, (*nps, 3)), 0, 1)
+
+        
+        if 'Fw' in namex:
+            if pp['We']:
+                varx = symlog10(PS.We0.reshape(PS.nps))
+                #print(np.amax(varx))
+                #print(np.amin(varx))
+            else:
+                varx = symlog10(getattr(PS, namex).reshape(PS.nps))
+        else:
+            varx = np.log10(getattr(PS, namex).reshape(PS.nps))
+        if 'Fw' in namey:
+            vary = symlog10(getattr(PS, namey).reshape(PS.nps))
+        else:
+            vary = np.log10(getattr(PS, namey).reshape(PS.nps))
+            
+
+        labels = ['  III', '  IV']
+        #len_lab = len(labels)
+        
+        # SM - locations in parameter space.
+        Ras = [1000, 50000]
+        Fws = [1.7, -.5]
+        
+        #if h[0]:
+            #pass
+        
+        
+        ax = fig.add_subplot(s3[a])
+        cfig = ax.imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'lower', aspect = 'auto')
+        ax.set_title(f"Regimes: Fr = {ndd['Fr'][0]}")
+            #plt.colorbar(cm, ax=ax)
+        if ndd['Fr'][0] == 0.025:
+            Ras = np.log10(np.array(Ras))
+            Fws = symlog10(np.array(Fws))
+            ax.scatter(Fws, Ras, c = 'k')
+            for i,lab in zip([0,1], labels):
+                ax.annotate(lab, (Fws[i], Ras[i]))
+            #ax.set_ylabel(ndd['pars'][1])        
+        
+        if pp['hatches']:
+            #if a==0:
+            ax.contourf(varx, vary, PS.maskOri[:,0].reshape(PS.nps), 1, hatches =  [None,"X"], alpha = 0)
+            ax.contourf(varx, vary, PS.maskOri[:,1].reshape(PS.nps), 1, hatches =  [None,"/"], alpha = 0)
+            ax.contourf(varx, vary, PS.maskOri[:,2].reshape(PS.nps), 1, hatches =  [None,"+"], alpha = 0)
+            ax.contourf(varx, vary, PS.maskOri[:,3].reshape(PS.nps), 1, hatches =  [None,"."], alpha = 0)
+            ax.contourf(varx, vary, PS.maskOri[:,4].reshape(PS.nps), 1, hatches =  [None,"O"], alpha = 0) 
+        #plt.yticks([-4,-3,-2,-1,0,1,2,3,4,5,6], ['$10^{-4}$','$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$', '$10^1$', '$10^2$', '$10^3$', '$10^4$', '$10^5$', '$10^6$'])
+        #if a not in [3,4,5]:
+            
+        
+        if a in [0,1]:
+            plt.setp(ax.get_xticklabels(), visible=False)
+        else:
+            ax.set_xlabel(ndd['pars'][0])
+
+        if a in [1,3]:
+            plt.setp(ax.get_yticklabels(), visible=False)
+        else:
+            ax.set_ylabel(ndd['pars'][1])
+
+
+        if 'Fw' in namex:
+            #print(invsymlog10(np.amax(varx)))
+            numTicks = 7
+            ax.plot([0,0], [np.amin(vary), np.amax(vary)], c = 'w', lw = .5, ls = ':') #look at this!!!
+            FwVal = invsymlog10(np.linspace(np.amin(varx), np.amax(varx), numTicks))
+            FwTicks = []
+            for t in range(numTicks): FwTicks.append(f'{FwVal[t]:1.1f}')
+            plt.xticks(FwV, FwT)
+            #print(invsymlog10(np.linspace(np.amin(varx), np.amax(varx), 11)))
+            #print(type(invsymlog10(np.linspace(np.amin(varx), np.amax(varx), 11))))
+            #print(np.linspace(symlog10(np.amin(varx)), symlog10(np.amax(varx)), 11))
+            #print(np.amax(varx))
+        elif 'Ra' in namex:
+            plt.xticks([2,3,4,5], ['$10^2$', '$10^3$', '$10^4$', '$10^5$'])
+        elif 'Fr' in namey:
+            plt.xticks([-4,-3,-2,-1,0], ['$10^{-4}$','$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
+        if 'Fw' in namey:
+            ax.plot([np.amin(varx), np.amax(varx)],[0,0], c = 'w', lw = .5) #look at this!!!
+            plt.yticks(np.linspace(np.amin(varx), np.amax(varx), 11), ['$-10^2$','$-10^1$', '$-1$', '$-10^{-1}$', '$-10^{-2}$', '$0$','$10^{-2}$', '$10^{-1}$', '$1$', '$10^1$', '$10^2$'])
+            ax.set_yscale('symlog')
+            #print(np.linspace(symlog10(np.amin(varx)), symlog10(np.amax(varx)), 11))
+            #print(np.amax(varx))
+        elif 'Ra' in namey:
+            plt.yticks([2,3,4,5], ['$10^2$', '$10^3$', '$10^4$', '$10^5$'])
+        elif 'Fr' in namey:
+            plt.yticks([-4,-3,-2,-1,0], ['$10^{-4}$','$10^{-3}$', '$10^{-2}$', '$10^{-1}$', '$1$'])
+        a += 1
+        
+def plotSM4(pp, SM):
+    cmap = 'Blues'
+    c0 = ['tab:blue', 'tab:green', 'tab:orange', 'tab:green']
+    c1 = ['tab:gray', 'tab:gray', 'tab:gray', 'tab:cyan']
+    titles = ['Regime I', 'Regime II', 'Regime III', 'Regime IV']
+    T0 = ['  D  ', 'G-G', 'W-W', 'G-G']
+    T1 = ['  F  ', '  F  ', '  F  ', 'G-W']
+    
+    LsT = [r'$L_s \sim H K_H Q^{-1}$', r'$L_s \sim H^3 K_M^{-1} Q^{-1/3}$', r'$L_s \sim H^5 K_M^{-3} Q^{-1} \tau_w^2$', r'$L_s \sim H^2 |\tau_w|^{-1}$']
+
+    PhiM = [r'$\Phi_0 \sim$ Straining', r'$\Phi_0 \sim$ Gradient', r'$\Phi_0 \sim$ Gradient', r'$\Phi_0 \sim$ Gradient']
+    
+    LP = [r'$L_s \sim H K_H Q^{-1}$\\'r'$\Phi_0 \sim$ Straining',
+          r'$L_s \sim H^3 K_M^{-1} Q^{-1/3}$\\'r'$\Phi_0 \sim$ Gradient',
+          r'$L_s \sim H^5 K_M^{-3} Q^{-1} \tau_w^2$\\'r'$\Phi_0 \sim$ Gradient',
+          r'$L_s \sim H^2 |\tau_w|^{-1}$\\'r'$\Phi_0 \sim$ Gradient']
+
+    
+    
+    fig = plt.figure(constrained_layout=True)
+    s3 = fig.add_gridspec(ncols=2, nrows=2)
+    for i in range(4):
+        ax = fig.add_subplot(s3[i])
+        SM[i].S[-1,0] = 0
+        a1 = ax.contourf(SM[i].Xp, SM[i].sigmap, SM[i].S, 50, cmap = cmap, corner_mask = True)
+        ax.contour(a1, levels = np.linspace(0,1,10), colors = 'k', linewidths = .5)
+        ax.plot(SM[i].X, SM[i].Sb - 1, 'k', lw = 1.5, ls = '-')
+        ax.set_title(titles[i])
+        xnew = np.linspace(np.min(SM[i].X), 0, np.max(np.shape(SM[i].X)))
+        Xp_interp, _ = np.meshgrid(xnew, SM[i].sigma)
+    
+        U_interp  = griddata((np.ravel(SM[i].sigmap), np.ravel(SM[i].Xp)), np.ravel(SM[i].U) , (SM[i].sigmap, Xp_interp), method='linear')
+        W_interp  = griddata((np.ravel(SM[i].sigmap), np.ravel(SM[i].Xp)), np.ravel(SM[i].W) , (SM[i].sigmap, Xp_interp), method='linear')
+        #mag = U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2
+        um = np.amax(np.abs(SM[i].U))
+        wm = np.amax(np.abs(SM[i].W))
+        ws = um/wm/50000
+        #f2 = axs[2,0].contourf(Xp, sigmap, U, 50, cmap = cmap, corner_mask = True)
+        ax.streamplot(Xp_interp, SM[i].sigmap, U_interp, W_interp*ws, density = .35, color= 'tab:gray', linewidth = .5)
+        ax.set_ylim([-1,0])
+        #print(f'ws = {ws} and um = {um} and wm = {wm}')
+        #print()
+        #lev =  np.linspace(np.amin(SM[i].U) ,np.amax(SM[i].U),10)
+        
+        Ls = np.min(SM[i].X)
+        xa = xnew/Ls
+        
+        xa = [.2*Ls, .8*Ls, .5*Ls]
+        ya = [-.9, -.5, -.1]
+        dx = [.2*Ls, -.2*Ls, ]
+        dy = [0,0]
+        
+        ax.text(
+            xa[0], ya[0], T0[i], ha="center", va="center", rotation=0, size=12,
+            bbox=dict(boxstyle="larrow, pad=0.3", fc=c0[i], ec="b", lw=0))
+        
+        ax.text(
+            xa[1], ya[1], T1[i], ha="center", va="center", rotation=0, size=12,
+            bbox=dict(boxstyle="rarrow, pad=0.3", fc=c1[i], ec="b", lw=0))
+        
+        ax.text(
+            .5*Ls, -.1, PhiM[i], ha="center", va="center", rotation = 0, size = 10,
+            bbox=dict(boxstyle="darrow, pad=0.3", fc='w', ec="b", lw=0))
+        
+        ax.text(
+            .5*Ls, -.1, LP[i], ha="center", va="center", rotation = 0, size = 10,
+            bbox=dict(boxstyle="square, pad=0.3", fc='w', ec="b", lw=0))
+        
+        
+        
+#        ax.annotate(, xy = (.98*Ls, -.98),  xycoords = 'data',
+ #           xytext=(.9*Ls, -.2), textcoords='data', fontsize = '12',
+ #           arrowprops = dict(facecolor = 'black', shrink = 0.05, connectionstyle="arc3", width = 1, headwidth = 3),
+ #           horizontalalignment = 'left', verticalalignment='top'
+ #           )
+
+        #plt.arrow(xa[0], ya[0], dx[0], dy[0], head_length = -.05*Ls, head_width = .2, width = .1, length_includes_head=True, lw=0, color = c0[i])
+        #plt.arrow(xa[1], ya[1], dx[1], dy[1], head_length = -.05*Ls, head_width = .2, width = .1, length_includes_head=True, lw=0, color = c1[i])
+        
+        #plt.arrow(xa[1], ya[1], dx[1], dy[1], head_length = -.05*Ls, head_width = .2, width = .1, length_includes_head=True, lw=0, color = c1[i])
+
+        #plt.text(1.1*xa[0], ya[0], T0[i],fontsize=12)
+        #plt.text(1.1*xa[1], ya[1], T1[i],fontsize=12)
+         
+            #a2 = ax.contourf(Xp, sigmap, U, 50, cmap = 'RdBu', corner_mask = True, vmin = min(np.amin(U), -np.amax(U)), vmax = max(np.amax(U), -np.amin(U)))
+        #ax.contour(a1, levels = lev, colors = 'w', linewidths = 0.5)
+            #ax.set_title(r'Flow $U(X,\sigma)$')
+            #cb=plt.colorbar(a2, ax=ax)
+            #tic = np.linspace(np.amin(U), np.amax(U), 6)
+            #print(tic)
+            #cb.set_ticks(tic)
+            #cb.set_ticklabels(["%.3f" % ti for ti in tic])
+        
+        
+        #cb = plt.colorbar(a1, ax=ax)
+        #cb.set_ticks([0.0, .2, .4, .6, .8, 1.0])
+        if i>1:
+            ax.set_xlabel(r'$X$')
+        else:
+            pass
+        plt.setp(ax.get_xticklabels(), visible=False)
+            
+        if i in [0,2]:
+            ax.set_ylabel(r'$\sigma$')
+            #ax.grid(True)
+            #ax.set_yticks([0, -.5, -1])
+        plt.setp(ax.get_yticklabels(), visible = False)
+    fig.suptitle('Salinity regimes and transport balances')
+
+            
+            

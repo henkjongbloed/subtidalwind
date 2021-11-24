@@ -26,7 +26,7 @@ class ParameterSweep:
         self.Sc = nondimDict['Sc']
         self.n = nondimDict['n']
         self.name = nondimDict['name']
-        print(np.amax(self.Fw))
+        #print(np.amax(self.Fw))
         return
     
     def run(self):
@@ -56,7 +56,7 @@ class ParameterSweep:
                 self.D2[i], self.Exx[i,:], self.Exy[i,:] = computeLocalExtrema(self.a[i]/self.d[i], self.b[i]/self.d[i], self.c[i]/self.d[i], 0.0)
                 self.Sb_X0[i], self.mask[i,0] = solveCubic(np.array([self.a[i],self.b0[i],self.c0[i], -self.d[i]]))
                 self.Sb_0[i], self.Phi_0[i] = processBC(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Ra[i], self.Fr[i], self.Fw[i], self.Sc, self.Sb_X0[i])
-                self.rs[i], self.Xs[i], self.mask[i,1] = computersXs(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Sb_X0[i])
+                self.rs[i], self.Xs[i], self.rs0[i], self.Xs0[i], self.rs1[i], self.Xs1[i], self.mask[i,1] = computersXs(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Sb_X0[i], self.Fr[i], self.Ra[i], self.Fw[i])
                 self.mask[i,2] = computeNU(self.D2[i], self.Exx[i,:], self.Sb_X0[i], self.rs[i])
                 #self.mask[i,2] = computeNU(self.gp,  self.a[i], self.b[i], self.c[i], self.d[i],  self.Sb_0[i])
                 if nonunique == 0: #Save the original mask for plotting later on.
