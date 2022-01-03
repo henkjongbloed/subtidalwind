@@ -112,8 +112,8 @@ class ParameterSweep:
                     self.mask[i,5] = 1
                     self.Reg[i,:] = np.array([.7,.7,.7])
                 self.mask[i,7] = any(self.mask[i,:])
-                if np.fmod(10*i, self.n) < .01:
-                    print(i/self.n)
+                #if np.fmod(100*i, self.n) < .02:
+                print(i/self.n)
                 i += 1 #Proceed to next parameter tuple, reset iterative parameters.
             self.maskOri = self.mask
 

@@ -23,15 +23,15 @@ class SingleNonDim:
         return
     
     def run(self):            
-        self.mask = np.empty(7, dtype = bool)
+        self.mask = np.empty(5, dtype = bool)
         self.maskOri = np.copy(self.mask)
         if not self.gp['mixAway']:
             self.L, self.a, self.b, self.c, self.d, self.b0, self.c0 = nonDim2ODECoeff(self.gp, self.Ra, self.Fr, self.Fw, self.Sc)
             #self.D3mouth = computeD3(self.a, self.b0, self.c0, -self.d)
             self.D2, self.Exx, self.Exy = computeLocalExtrema(self.a/self.d, self.b/self.d, self.c/self.d, 0) #Exx = [xright, xleft, xsaddle]
             self.Sb_X0, self.mask[0] = solveCubic(np.array([self.a,self.b0,self.c0, -self.d]))
-            print(self.Sb_X0)
-            print(self.Fr/self.L[0]) 
+            #print(self.Sb_X0)
+            #print(self.Fr/self.L[0]) 
             if self.mask[0]:
                 print(f'Non-unique mouth salinity, stopped.')
                 return self

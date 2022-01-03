@@ -8,7 +8,7 @@ def globalParameters(**kwargs):
     gp = dict(R = 2, #R: real or Inf
         ep = 1/30, #Salinity fraction at landward end
         n = [1, 401, 31, 13], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
-        SM = [1001,21], #Single model run: grid.
+        SM = [501,41], #Single model run: grid.
         PS = [51,11],
         tolNEG = 0,
         tolUN = 0,
