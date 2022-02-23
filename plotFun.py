@@ -234,18 +234,18 @@ def plotNDim2(pp,PS):
     #cm = co.ListedColormap(np.identity(3))
     #cm = co.LinearSegmentedColormap.from_list
     # Let's also define the description of each category : 1 (blue) is Sea; 2 (red) is burnt, etc... Order should be respected here ! Or using another dict maybe could help.
-    labels = ['  III', '  IV']
+    labels = ['I', 'II', 'III', '  IV']
     #len_lab = len(labels)
     
     # SM - locations in parameter space.
-    Ras = [1000, 50000]
-    Fws = [1.7, -.5]
+    Ras = [100, 1e4, 1000, 50000]
+    Fws = [.1, .1, 1.7, -.5]
     
     #if h[0]:
         #pass
     
     
-    for a in range(4):
+    for a in range(2):
         ax = fig.add_subplot(s3[a])
         cfig = ax.imshow(Regcolor, extent = (np.amin(varx), np.amax(varx), np.amin(vary), np.amax(vary)), origin = 'lower', aspect = 'auto')
         if a==0: 
@@ -255,7 +255,7 @@ def plotNDim2(pp,PS):
                 Ras = np.log10(np.array(Ras))
                 Fws = symlog10(np.array(Fws))
                 ax.scatter(Fws, Ras, c = 'k')
-                for i,lab in zip([0,1], labels):
+                for i,lab in zip(range(len(labels)), labels):
                     ax.annotate(lab, (Fws[i], Ras[i]), ha = 'left', va = 'bottom')
             #ax.set_ylabel(ndd['pars'][1])        
         elif a==2:
@@ -302,15 +302,17 @@ def plotNDim2(pp,PS):
         #if a not in [3,4,5]:
             
         
-        if a in [0,1]:
-            plt.setp(ax.get_xticklabels(), visible=False)
-        else:
-            ax.set_xlabel(ndd['pars'][0])
+        #if a in [0,1]:
+            #plt.setp(ax.get_xticklabels(), visible=False)
+        #else:
+            #pass
+        ax.set_xlabel(ndd['pars'][0])
 
-        if a in [1,3]:
-            plt.setp(ax.get_yticklabels(), visible=False)
-        else:
-            ax.set_ylabel(ndd['pars'][1])
+        #if a in [1,3]:
+            #plt.setp(ax.get_yticklabels(), visible=False)
+        #else:
+            #pass
+        ax.set_ylabel(ndd['pars'][1])
 
 
         if 'Fw' in namex:
@@ -1752,12 +1754,12 @@ def plotReg4(pp, PSList):
             vary = np.log10(getattr(PS, namey).reshape(PS.nps))
             
 
-        labels = ['  III', '  IV ']
+        labels = ['    I', '    II', '    III', '    IV ']
         #len_lab = len(labels)
         
         # SM - locations in parameter space.
-        Ras = [1000, 50000]
-        Fws = [1.7, -.5]
+        Ras = [100, 1e4, 1000, 50000]
+        Fws = [.1, .1, 1.7, -.5]
         
         #if h[0]:
             #pass
@@ -1771,7 +1773,7 @@ def plotReg4(pp, PSList):
             Ras = np.log10(np.array(Ras))
             Fws = symlog10(np.array(Fws))
             ax.scatter(Fws, Ras, c = 'k')
-            for i, lab in zip([0,1], labels):
+            for i, lab in zip(range(len(labels)), labels):
                 ax.annotate(lab, (Fws[i], Ras[i]), ha = 'left', va = 'bottom')
             #ax.set_ylabel(ndd['pars'][1])        
         
@@ -1786,16 +1788,18 @@ def plotReg4(pp, PSList):
         #if a not in [3,4,5]:
             
         
-        if a in [0,1]:
-            plt.setp(ax.get_xticklabels(), visible=False)
-        else:
-            ax.set_xlabel(ndd['pars'][0])
+        #if a in [0,1]:
+            #plt.setp(ax.get_xticklabels(), visible=False)
+        #else:
+        
+        ax.set_xlabel(ndd['pars'][0])
 
-        if a in [1,3]:
-            plt.setp(ax.get_yticklabels(), visible=False)
-        else:
-            ax.set_ylabel(ndd['pars'][1])
-
+        #if a in [1,3]:
+            #plt.setp(ax.get_yticklabels(), visible=False)
+        #else:
+        
+        ax.set_ylabel(ndd['pars'][1])
+        
 
         if 'Fw' in namex:
             #print(invsymlog10(np.amax(varx)))
@@ -1826,11 +1830,14 @@ def plotReg4(pp, PSList):
         a += 1
         
 def plotSM4(pp, SM):
+    c = pp["cartoon"]
     cmap = 'Blues'
     c0 = ['tab:blue', 'tab:green', 'tab:orange', 'tab:green']
     c1 = ['tab:gray', 'tab:gray', 'tab:gray', 'tab:cyan']
-    titles = [r'Regime I: $T_D \sim T_F$, $\tau_w \leftrightarrow$', r'Regime II: $T_{GG} \sim T_F$, $\tau_w \leftrightarrow$',
-              r'Regime III: $T_{WW} \sim T_F$, $\tau_w \longrightarrow$', r'Regime IV: $T_{GG} \sim T_{GW}$, $\tau_w \longleftarrow$']
+    #titles = [r'Regime I: $T_D \sim T_F$, $\tau_w \leftrightarrow$', r'Regime II: $T_{GG} \sim T_F$, $\tau_w \leftrightarrow$',
+    #          r'Regime III: $T_{WW} \sim T_F$, $\tau_w \longrightarrow$', r'Regime IV: $T_{GG} \sim T_{GW}$, $\tau_w \longleftarrow$']
+    titles = [r'Regime I: $\tau_w \leftrightarrow$', r'Regime II: $\tau_w \leftrightarrow$',
+              r'Regime III: $\tau_w \longrightarrow$', r'Regime IV: $\tau_w \longleftarrow$']
     T0 = ['  D  ', 'GG', 'WW', 'GG']
     T1 = ['  F  ', '  F  ', '  F  ', 'GW']
     
@@ -1838,11 +1845,11 @@ def plotSM4(pp, SM):
 
     #PhiM = [r'$\Phi_0 \sim$ Straining', r'$\Phi_0 \sim$ Gradient', r'$\Phi_0 \sim$ Gradient', r'$\Phi_0 \sim$ Gradient']
     
-    LP = [r'\[\begin{split}L_s &\sim H K_H Q^{-1}\\ \Phi_0 &\sim \tau_w \end{split}\]',
-          r'\[\begin{split}L_s &\sim H^3 K_M^{-1} Q^{-1/3}\\ \Phi_0 &\sim \bar{\Sigma}_X \end{split}\]',
-          r'\[\begin{split}L_s &\sim H^5 K_M^{-3} Q^{-1} \tau_w^2\\ \Phi_0 &\sim \bar{\Sigma}_X \end{split}\]',
-          r'\[\begin{split}L_s &\sim H^2 |\tau_w|^{-1}\\ \Phi_0 &\sim \bar{\Sigma}_X \end{split}\]']
-          
+    LP = [r'\[\begin{split} L_s &\sim H K_H Q^{-1}\\ \Phi_0 &\sim / \end{split}\]',
+          r'\[\begin{split} L_s &\sim H^3 K_M^{-1} Q^{-1/3}\\ \Phi_0 &\sim - \end{split}\]',
+          r'\[\begin{split} L_s &\sim H^5 K_M^{-3} Q^{-1} \tau_w^2\\ \Phi_0 &\sim - \end{split}\]',
+          r'\[\begin{split} L_s &\sim H^2 |\tau_w|^{-1}\\ \Phi_0 &\sim - \end{split}\]']
+
     #L_s &\sim H K_H Q^{-1}\\'r'$\Phi_0 \sim$ Straining',
     #r'$L_s \sim H^3 K_M^{-1} Q^{-1/3}$\\'r'$\Phi_0 \sim$ Gradient',
     #r'$L_s \sim H^5 K_M^{-3} Q^{-1} \tau_w^2$\\'r'$\Phi_0 \sim$ Gradient',
@@ -1853,104 +1860,84 @@ def plotSM4(pp, SM):
     #r'    r^2    &= 0.95 '
     #r'\end{split}'
     #r'\]',
+    Ls = []
+    
+    fig = plt.figure(constrained_layout = True)
     
     
-    fig = plt.figure(constrained_layout=True)
-    s3 = fig.add_gridspec(ncols=2, nrows=2)
+    s3 = fig.add_gridspec(ncols = 2, nrows = 2)
+
     for i in range(4):
         ax = fig.add_subplot(s3[i])
         SM[i].S[-1,0] = 0
-        a1 = ax.contourf(SM[i].Xp, SM[i].sigmap, SM[i].S, 50, cmap = cmap, corner_mask = True)
-        ax.contour(a1, levels = np.linspace(0,1,10), colors = 'k', linewidths = .5)
-        ax.plot(SM[i].X, SM[i].Sb - 1, 'k', lw = 1.5, ls = '-')
-        ax.set_title(titles[i])
+        ax.set_ylim([-1,0])
+        Ls.append(np.min(SM[i].X))
+        
+        
+        xa = [.2*Ls[i], .8*Ls[i], .5*Ls[i]]
+        ya = [-.8, -.5, -.1]
+        print(xa)
         xnew = np.linspace(np.min(SM[i].X), 0, np.max(np.shape(SM[i].X)))
+        #xa = xnew/Ls[i]
         Xp_interp, _ = np.meshgrid(xnew, SM[i].sigma)
     
         U_interp  = griddata((np.ravel(SM[i].sigmap), np.ravel(SM[i].Xp)), np.ravel(SM[i].U) , (SM[i].sigmap, Xp_interp), method='linear')
         W_interp  = griddata((np.ravel(SM[i].sigmap), np.ravel(SM[i].Xp)), np.ravel(SM[i].W) , (SM[i].sigmap, Xp_interp), method='linear')
-        #mag = U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2
+            #mag = U_interp[1:-1, 1:-1]**2 + W_interp[1:-1, 1:-1]**2
         um = np.amax(np.abs(SM[i].U))
         wm = np.amax(np.abs(SM[i].W))
         ws = um/wm/40000
-        #f2 = axs[2,0].contourf(Xp, sigmap, U, 50, cmap = cmap, corner_mask = True)
-        ax.streamplot(Xp_interp, SM[i].sigmap, U_interp, W_interp*ws, density = .45, color= 'tab:gray', linewidth = .5)
-        ax.set_ylim([-1,0])
-        #print(f'ws = {ws} and um = {um} and wm = {wm}')
-        #print()
-        #lev =  np.linspace(np.amin(SM[i].U) ,np.amax(SM[i].U),10)
-        
-        Ls = np.min(SM[i].X)
-        xa = xnew/Ls
-        
-        xa = [.2*Ls, .8*Ls, .5*Ls]
-        ya = [-.8, -.5, -.1]
+        if c >0:        
+            ax.plot(SM[i].X, SM[i].Sb - 1, 'k', lw = 1.5, ls = '-') # depth-averaged salinity profile
+        if c > 1:
+            #f2 = axs[2,0].contourf(Xp, sigmap, U, 50, cmap = cmap, corner_mask = True)
+            ax.streamplot(Xp_interp, SM[i].sigmap, U_interp, W_interp*ws, density = .45, color= 'tab:gray', linewidth = .5)
+        if c>2:
+            a1 = ax.contourf(SM[i].Xp, SM[i].sigmap, SM[i].S, 50, cmap = cmap, corner_mask = True) # salinity
+            ax.contour(a1, levels = np.linspace(0,1,10), colors = 'k', linewidths = .5) # salinity contour levels
+        if c>3:
+            ax.set_title(titles[i])
         #dx = [.2*Ls, -.2*Ls, ]
         #dy = [0,0]
+            ax.text(
+                xa[0], ya[0], T0[i], ha="center", va="center", rotation = 0, size = 14,
+                bbox=dict(boxstyle="larrow, pad=0.5", fc = c0[i], ec = "k", lw = 1))
+            ax.text(
+                xa[1], ya[1], T1[i], ha="center", va="center", rotation = 0, size = 14,
+                bbox=dict(boxstyle="rarrow, pad=0.5", fc = c1[i], ec = "k", lw = 1))
+        if c>4:
+            ax.text(
+                Ls[i], -.01, LP[i], ha = "left", va = "top", rotation = 0, size = 12,
+                bbox = dict(boxstyle="square, pad=0.3", fc = 'w', ec = "k", lw=1))
         
-        ax.text(
-            xa[0], ya[0], T0[i], ha="center", va="center", rotation = 0, size = 14,
-            bbox=dict(boxstyle="larrow, pad=0.5", fc = c0[i], ec = "k", lw = 1))
-        
-        ax.text(
-            xa[1], ya[1], T1[i], ha="center", va="center", rotation = 0, size = 14,
-            bbox=dict(boxstyle="rarrow, pad=0.5", fc = c1[i], ec = "k", lw = 1))
-        
-        #ax.text(
-            #.5*Ls, -.1, PhiM[i], ha="center", va="center", rotation = 0, size = 10,
-            #bbox=dict(boxstyle="darrow, pad=0.3", fc='w', ec="b", lw=0))
-        
-        ax.text(
-            Ls, -.01, LP[i], ha = "left", va = "top", rotation = 0, size = 12,
-            bbox = dict(boxstyle="square, pad=0.3", fc = 'w', ec = "k", lw=1))
-        
-        #ax.annotate(r'$\tau_w$', xy=(.3*Ls, -.1),  xycoords='data',
-            #xytext=(.5*Ls, -.1), textcoords='data',
-            #arrowprops = dict(facecolor='black', arrowstyle = '<->'),
-            #horizontalalignment='right', verticalalignment='top' 
-            #)
-        #plt.arrow(.3*Ls, -.05, .5*dx[0], 0, head_length = -.05*Ls, head_width = .02, width = .01, length_includes_head = True, lw=0, color = 'k')
-        #plt.arrow(.3*Ls, -.05, -.5*dx[0], 0, head_length = -.05*Ls, head_width = .02, width = .01, length_includes_head = True, lw=0, color = 'k')
-
-        
-#        ax.annotate(, xy = (.98*Ls, -.98),  xycoords = 'data',
- #           xytext=(.9*Ls, -.2), textcoords='data', fontsize = '12',
- #           arrowprops = dict(facecolor = 'black', shrink = 0.05, connectionstyle="arc3", width = 1, headwidth = 3),
- #           horizontalalignment = 'left', verticalalignment='top'
- #           )
-
-        #plt.arrow(xa[1], ya[1], dx[1], dy[1], head_length = -.05*Ls, head_width = .2, width = .1, length_includes_head=True, lw=0, color = c1[i])
-        
-        #plt.arrow(xa[1], ya[1], dx[1], dy[1], head_length = -.05*Ls, head_width = .2, width = .1, length_includes_head=True, lw=0, color = c1[i])
-
-        #plt.text(1.1*xa[0], ya[0], T0[i],fontsize=12)
-        #plt.text(1.1*xa[1], ya[1], T1[i],fontsize=12)
-         
-            #a2 = ax.contourf(Xp, sigmap, U, 50, cmap = 'RdBu', corner_mask = True, vmin = min(np.amin(U), -np.amax(U)), vmax = max(np.amax(U), -np.amin(U)))
-        #ax.contour(a1, levels = lev, colors = 'w', linewidths = 0.5)
-            #ax.set_title(r'Flow $U(X,\sigma)$')
-            #cb=plt.colorbar(a2, ax=ax)
-            #tic = np.linspace(np.amin(U), np.amax(U), 6)
-            #print(tic)
-            #cb.set_ticks(tic)
-            #cb.set_ticklabels(["%.3f" % ti for ti in tic])
-        
-        
-        #cb = plt.colorbar(a1, ax=ax)
-        #cb.set_ticks([0.0, .2, .4, .6, .8, 1.0])
-        if i>1:
-            ax.set_xlabel(r'$x$')
-            plt.xticks([Ls, 0], ['$-L_s$', '$0$'])
+        if c < 4:
+            if i>-1:
+                ax.set_xlabel(r'$x$')
+                plt.xticks([Ls[i], 0], ['$-L_s$', '$0$'])
+            else:
+                plt.xticks([], [])
+                
+            if i >-1:
+                ax.set_ylabel(r'$z$')
+                #ax.grid(True)
+                plt.yticks([-1, 0], ['$-H$', '$0$'])
+            else:
+                plt.yticks([], [])
+                #plt.setp(ax.get_yticklabels(), visible = False)
         else:
-            plt.xticks([], [])
-            
-        if i in [0,2]:
-            ax.set_ylabel(r'$z$')
-            #ax.grid(True)
-            plt.yticks([-1, 0], ['$-H$', '$0$'])
-        else:
-            plt.yticks([], [])
-            #plt.setp(ax.get_yticklabels(), visible = False)
+            if i>1:
+                ax.set_xlabel(r'$x$')
+                plt.xticks([Ls[i], 0], ['$-L_s$', '$0$'])
+            else:
+                plt.xticks([], [])
+                
+            if i in [0,2]:
+                ax.set_ylabel(r'$z$')
+                #ax.grid(True)
+                plt.yticks([-1, 0], ['$-H$', '$0$'])
+            else:
+                plt.yticks([], [])
+                #plt.setp(ax.get_yticklabels(), visible = False)
     #fig.suptitle('Salinity regimes and transport balances')
 
             

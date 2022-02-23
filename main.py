@@ -36,11 +36,12 @@ gp = globalParameters(R = 2,
                 scaledTransportPlot = True,
                 tolUN = 0,
                 tolNEG = 0,
-                n = [1, 1001, 401, 1] )#Setting parameters such as BC, alpha. n = [n0D, n1D, n2D, n3D] determines the number of pixels in parameter sensitivity plots.
+                n = [1, 1001, 501, 1] )#Setting parameters such as BC, alpha. n = [n0D, n1D, n2D, n3D] determines the number of pixels in parameter sensitivity plots.
 
 pp = plotParameters(hatches = False,
         mask = ~gp['mixAway'],
-        We = False)
+        We = False,
+        cartoon = 1)
 
 
 ## Figs Results paragraph 1
@@ -58,6 +59,7 @@ plt.show()
 ## Figs Results paragraph 2
 
 #Regimes
+'''
 PSList = []
 
 i = 0
@@ -69,7 +71,7 @@ for fr in [0.025]:
         plotNDim(pp, PSList[i])
         i += 1
 #plotReg4(pp, PSList)
-
+'''
 #Regimes with Phi0, SbX0 and Lambda_s
 PSList = []
 i = 0
@@ -123,7 +125,7 @@ for i in si:
         
         
 plotDimNDim(pp, PSDList, dimDictList, PSList)
-'''
+
 
 # Cartoon
 PSList = []
@@ -140,5 +142,5 @@ for ra, fw in zip(Ras, Fws):
     i+=1
 
 plotSM4(pp,SMList)
-
+'''
 plt.show()
