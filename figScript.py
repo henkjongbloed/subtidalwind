@@ -273,10 +273,6 @@ pp = plotParameters(hatches = False,
 PSList = []
 
 i = 0
-
-
-
-
 for fr in [0.00025, 0.0025, 0.025, 0.1]:
         ndd = makeNDDict(gp, 'Fw', 'Ra', Fr = fr, name = 'fr')
         PSList.append(ParameterSweep(gp, ndd, 0).run())
