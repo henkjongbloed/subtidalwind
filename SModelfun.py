@@ -35,7 +35,7 @@ class SingleNonDim:
             if self.mask[0]:
                 print(f'Non-unique mouth salinity, stopped.')
                 return self
-            self.Sb_0, self.Phi_0 = processBC(self.gp, self.Sb_X0, self.a, self.b, self.c, self.d, self.Ra, self.Fr, self.Fw, self.Sc)
+            self.Sb_0, self.Phi_0 = processBC(self.gp,  self.a, self.b, self.c, self.d, self.Ra, self.Fr, self.Fw, self.Sc, self.Sb_X0)
             self.rs, self.Xs, self.rs0, self.Xs0, self.rs1, self.Xs1, self.mask[1] = computersXs(self.gp, self.a, self.b, self.c, self.d, self.Sb_X0, self.Fr, self.Ra, self.Fw)
             if self.mask[1]:
                 print('Illegal salt intrusion length')
@@ -56,15 +56,15 @@ class SingleNonDim:
                 self.Sb_0, self.Phi_0 = processBC(self.gp, self.Sb_X0, self.a, self.b, self.c, self.d, self.Ra, self.Fr, self.Fw, self.Sc)
                 self.rs, self.Xs, self.mask[1] = computersXs(self.gp, self.a, self.b, self.c, self.d, self.Sb_X0)
                 self.mask[2] = computeNU(self.D2, self.Exx, self.Sb_X0, self.rs)
-                print(self.mask[2])
-                print(self.Sb_X0)
-                print(self.Fr/self.L[6]) 
+                #print(self.mask[2])
+                #print(self.Sb_X0)
+                #print(self.Fr/self.L[6]) 
                 if nonunique == 0: #Save the original mask for plotting later on.
                     self.maskOri[0:3] = self.mask[0:3]
                 if not any(self.mask[0:3]):
                     self.T = scaledIntegratedTransport(self.gp, self.L, self.a, self.b, self.c, self.d, self.Sb_X0, self.rs, self.Xs)
                     self.Reg = computeRegime(self.T)
-                    self.LsT = computeLsTheory(self.gp, self.L, self.Sb_0)
+                    self.LsT = computeTheory(self.gp, self.L, self.Sb_0)
                     self.mask[3], self.mask[4], maxUN = computePhysicalMasksPS(self.gp, self.a, self.b, self.c, self.d, self.Ra, self.Fr, self.Fw, self.Sc, self.Sb_X0, self.rs)
                     if nonphysical == 0:
                         self.maskOri[3:5] = self.mask[3:5]
@@ -77,14 +77,14 @@ class SingleNonDim:
                 else: #Solution does not exist/is non-unique: Increase mixing.
                     nonunique =+ 1
                     self.Ra, self.Fw, self.mask[5]  = findMixing(fac, self.Ra, self.Fw)
-                    print('Fixed Math mask')
+                    #print('Fixed Math mask')
                     continue
                 i += 1 #Proceed to next parameter tuple, reset iterative parameters.
-                print(i)
+                #print(i)
                 nonunique = 0
                 nonphysical = 0
             self.mixIncrease = self.RaOri/self.Ra
-            print(self.mixIncrease)
+            #print(self.mixIncrease)
         self.r, self.X, self.Sb, self.Sb_X, self.Sb_XX = solveODE(self.gp, self.a, self.b, self.c, self.d, self.Sb_X0, self.rs)
         self.processSM()
         return self
@@ -99,3 +99,14 @@ class SingleNonDim:
         self.S, self.S_X, self.Sbar, self.Sacc, self.Sbar_X, self.Sacc_X = computeS(self.gp, self.Ra, self.Fr, self.Fw, self.Sc, self.P, self.Sb, self.Sb_X, self.Sb_XX)
         self.mask[3], self.mask[4] = computePhysicalMasks(self.gp, self.Ra, self.Fr, self.Fw, self.Sc, self.Sb, self.Sb_X)
         return
+    
+    def make_dimensional(self, dd):
+        c = np.sqrt(dd['g']*dd['beta']*dd['s_0']*dd['H']) # Velocity scale
+        self.x = self.X*dd['K_H']/c
+        self.xp = self.Xp*dd['K_H']/c
+        self.z = self.sigma*dd['H']
+        self.zp = self.sigmap*dd['H']
+        self.u = self.U*c # Horizontal velocity scale
+        self.w = self.W*dd['K_M']/dd['H'] # Vertical velocity scale (not mentioned in paper)
+        self.s = self.S*dd['s_0'] # Salinity scale
+        

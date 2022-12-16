@@ -1,40 +1,39 @@
 import numpy as np
 import matplotlib.colors as co
-#from numpy.linalg.linalg import qr
-#from numpy.ma.extras import masked_all
-#import numpy.matlib
+
+# Function script for computing relevant quantities 
 
 def globalParameters(**kwargs):
-    gp = dict(R = 2, #R: real or Inf
-        ep = 1/30, #Salinity fraction at landward end
+    gp = dict(R = 2, #R: real or Inf (partial slip parameter, value 2 in paper)
+        ep = 1/30, #Salinity fraction that defines landward end
         n = [1, 401, 31, 13], #0 parameters to vary, 1 parameter, 2 parameters, 3 parameters.
-        SM = [501,41], #Single model run: grid.
-        PS = [51,11],
-        tolNEG = 0,
-        tolUN = 0,
-        tolPrit = 10, #not employed in current version of script.
-        Sc = 2.2,
-        mixAway = False,
+        SM = [501,41], #Single model run: grid dimensions X, sigma
+        PS = [51,11], # Sensitivity analysis: grid dimensions X, sigma
+        tolNEG = 0, # Tolerance for negative salinity
+        tolUN = 0, # Tolerance for unstable stratification
+        tolPrit = 10, #Tolerance for violating dominant balance
+        Sc = 2.2, # Prandtl - Schmidt number
+        mixAway = False, # Increase mixing until valid model simulation is reached (not visualized in paper)
         m = 2, #tuning factor for mixing algorithm
-        Ori = True, #Plots 'Original' parameters instead of modified ones. (now; only NonDim compatible)
+        Ori = True, #Plots 'Original' parameters instead of modified ones. (in case of MixAway = True. now; only NonDim compatible)
         )
     
-    gp['C'] = addC(gp['R'])
-    
-    for key, value in kwargs.items(): #Change the constant parameters
-            gp[key] = value
+    gp['C'] = addC(gp['R']) # Shape function coefficients
+        
+    for key, value in kwargs.items(): #Change the default parameters for user-defined parameters
+            gp[key] = value 
     return gp
 
 def solveCubic(r):
     '''Computes single real solution based on parameter values'''
     solC = np.roots(r)
     #print(f'Three roots: {solC}')
-    D3 = computeD3(r[0],r[1],r[2],r[3])
+    D3 = computeD3(r[0],r[1],r[2],r[3]) # Compute determinant
     mask = (D3 >= 0)
     if ~mask: #one real solution
         sol = float(np.real(solC[np.isreal(solC)]))
         return sol, mask
-    else:
+    else: # Multiple real solutions or no solution
         return mask, mask
 
 def computeD3(a,b,c,d):
@@ -83,7 +82,7 @@ def computeLocalExtremaVect(a,b,c,d):
     yleft[D2>=0] = a[D2>=0]*xleft[D2>=0]**3 + b[D2>=0]*xleft[D2>=0]**2 + c[D2>=0]*xleft[D2>=0] + d[D2>=0]#y where first derivative is zero
     return D2, np.transpose(np.array([bpx, xright, xleft])), np.transpose(np.array([bpy, yright, yleft]))
 
-def dim2nondim(dimDict):
+def dim2nondim(dimDict): # Converts dimensional parameters (dictionary) to nondimensional dictionary of parameters
     Q, H, K_M, tau_w, K_H = dimDict['Q'], dimDict['H'], dimDict['K_M'], dimDict['tau_w'], dimDict['K_H']
     s_0, g, beta, rho_0 ,B= dimDict['s_0'], dimDict['g'], dimDict['beta'], dimDict['rho_0'], dimDict['B']
     
@@ -98,7 +97,7 @@ def dim2nondim(dimDict):
     nondimDict = dict(Ra = Ra, Fr = Fr, Fw = Fw, Sc = dimDict['Sc'])
     return nondimDict
 
-def defaultDim(gp):
+def defaultDim(gp): # Default set of dimensional parameters
     dd = dict(Q = 1000, 
         H = 20,  
         K_M = 1e-3, 
@@ -107,7 +106,7 @@ def defaultDim(gp):
         s_0 = 30.0, g = 9.81, beta = 7.6e-4, rho_0 = 1000.0, B = 1000.0, Sc = gp['Sc'])
     return dd
 
-def makeDicts(gp, *args, **kwargs):
+def makeDicts(gp, *args, **kwargs): # Makes both dimensional and non-dimensional parameter dictionaries for sensitivity analysis
     #First default values by Dijkstra and Schuttelaars (2021)
     dd = defaultDim(gp)
     
@@ -119,6 +118,12 @@ def makeDicts(gp, *args, **kwargs):
         ndd = dim2nondim(dd)
         ndd['pars'] = 'None'
         ndd['nps'] = 1
+        ndd['n'] = 1
+        if 'name' in kwargs:
+            ndd['name'] = kwargs['name']
+        else:
+            ndd['name'] = ndd['pars']
+            dd['name'] = ndd['pars']
         return dd, ndd
     elif len(args) == 1:
         n = gp['n'][1]
@@ -138,8 +143,10 @@ def makeDicts(gp, *args, **kwargs):
     H = np.logspace(0,2.5, n)
     if 'tau_w' in args:
         tau_w  = np.array(invsymlog10(np.linspace(symlog10(-1), symlog10(1), n)))
+        # print(np.sqrt(np.amax(tau_w)/(2.6e-3*1.225)))
         if 'tauwLim' in kwargs:
             tau_w  = np.array(invsymlog10(np.linspace(symlog10(kwargs['tauwLim'][0]), symlog10(kwargs['tauwLim'][1]), n)))
+            # print(np.sqrt(np.amax(tau_w)/(2.6e-3*1.225)))
         if 'dir' in kwargs:
             if kwargs['dir'] == 'Down':
                 tau_w = np.array(invsymlog10(np.linspace(symlog10(0), symlog10(0.3), n)))
@@ -157,7 +164,7 @@ def makeDicts(gp, *args, **kwargs):
             print(f"Mixing = {dd['K_M']}")
     if 'Sverdrup' in kwargs: # In this case, make K_M dependent on tau_w following Kullenberg 1976
         if kwargs['Sverdrup']:
-            omega = kwargs['Sverdrup']/(2.6e-3*1.225) # Change this coefficient to tune wind.
+            omega = kwargs['Sverdrup']# Change this coefficient to tune wind.
             dd['K_M'] = Sverdrup(tau_w, dd['K_M'], omega)
     #elif 'Ralston' in kwargs:
     #   K_M, K_H = Ralston(kwargs['Ralston'], H, dd['B'])
@@ -314,8 +321,8 @@ def Banas(u_T, H, B):
     K_H = 0.035*u_T*B
     return K_M, K_H
 
-def Sverdrup(tau_w, K_M0, beta):
-    K_M = K_M0 + beta*np.abs(tau_w)
+def Sverdrup(tau_w, K_M0, omega):
+    K_M = K_M0 + omega*np.abs(tau_w)
     return K_M
 
 def computersXs(gp, a, b, c, d, Sb_X0, Fr, Ra, Fw):
@@ -326,6 +333,8 @@ def computersXs(gp, a, b, c, d, Sb_X0, Fr, Ra, Fw):
     Input: ODE data
     
     Output: rs, Xs, rs0, Xs0, rs1, Xs1, mask
+    
+    See appendix of Jongbloed et al. 2022
     
     '''
     ep = gp['ep']
@@ -377,7 +386,7 @@ def scaledTransport(gp,L, Sb, Sb_X):
         Sb_X/Sb,#WW
         Sb_X/Sb,#D
         Sb/Sb#F
-        ] #For numerical integration.
+        ] #For numerical integration (not used in the paper)
     if gp['scaledTransportPlot']:
         TX = [l*p/L[7] for l,p in zip(L, P)] #transports as function of X, scaled by the river lengtscale (Fr)
     else:
@@ -391,6 +400,7 @@ def scaledIntegratedTransport(gp, L, a, b, c, d, Sb_X0, rs, Xs):
     
     Output: T (numpy array of shape 8)
     
+    See last part of appendix
     '''
     ep = gp['ep']
     
@@ -427,6 +437,8 @@ def solveODE(gp, a, b, c, d, Sb_X0, rs):
     Solves the qubic ODE.
     
     Output: r, X, Sb, Sb_X, Sb_XX (all numpy vectors)
+    
+    Analytical solution (only possible with non-varying parameters across the domain)
     
     '''
     #C = gp['C']
@@ -478,7 +490,7 @@ def getGrid(gp, X):
     '''
     Computes meshgrid of X and sigma
     
-    Input: gp and GridDim (either 'SMGrid' or 'PsGrid')
+    Input: gp and GridDim (either 'SMGrid' (single run) or 'PSGrid' (parameter sweep run))
     
     Output: Xp, sigmap (2d arrays of dimension GridDim) and sigma (1d array of dimension GridDim[1])
     '''
@@ -492,7 +504,7 @@ def computeS(gp, Ra, Fr, Fw, Sc, P, Sb, Sb_X, Sb_XX):
     '''
     Input: Avg salinity, derivatives and other parameters. 
     
-    Output: S, S_X, Sbar, Sacc, Sbar_X, Sacc_X
+    Output: S, S_X, Sbar, Sacc, Sbar_X, Sacc_X on X, sigma grid.
     
     '''
     nsigma = gp[gp['Class']][1]
@@ -503,7 +515,7 @@ def computeS(gp, Ra, Fr, Fw, Sc, P, Sb, Sb_X, Sb_XX):
     return S, S_X, Sbar, Sacc, Sbar_X, Sacc_X
 
 def computeSurfBottom(gp, Ra, Fr, Fw, Sc, Sb, Sb_X):
-    '''Input: Avg salinity, derivatives and other parameters. Output: S_surface and S_bottom and components.'''
+    '''Input: Avg salinity, derivative and other parameters. Output: S_surface and S_bottom and components.'''
     C = gp['C']
     Ssurf = Sb + Sc*Ra*(Fr*C[6] + Fw*C[8])*Sb_X + Sc*Ra**2*C[7]*Sb_X**2
     Sbot = Sb + Sc*Ra*(Fr*C[9] + Fw*C[11])*Sb_X + Sc*Ra**2*C[10]*Sb_X**2
@@ -513,7 +525,7 @@ def computeU(gp, Ra, Fr, Fw, P, Sb_X, Sb_XX):
     '''
     Input: Avg salinity gradient and other parameters
     
-    Output: U, W, UR, UG, UW (all numpy arrays)
+    Output: U, W, UR, UG, UW (all numpy arrays) on X, sigma grid.
     
     '''
     nsigma = gp[gp['Class']][1]
@@ -527,7 +539,7 @@ def computeU(gp, Ra, Fr, Fw, P, Sb_X, Sb_XX):
     W = -P[6]*Ra**2*np.matlib.repmat(np.transpose(Sb_XX),nsigma,1) # In this, we have assumed the vertical velocity scale K_M / H
     return U, W, Ubar, UR, UG, UW
 
-def computeNU(D2, Exx, Sb_X0, rs):
+def computeNU(D2, Exx, Sb_X0, rs): # Return 1 if solution is mathematically non-unique
     maskNU = False
     if D2 >=0:
         #Sb_Xs, mimi = solveCubic(np.array([a, b, c, -d*gp['ep']*Sb_0]))
@@ -549,6 +561,8 @@ def computePhysicalMasksPS(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, Sb_0, rs):
     Returns maskNEG and maskUNSTABLE (tolerances specified by gp)
     
     Only looks at surface and bottom salinity, not intermediate.
+    
+    Used for ParameterSweep
     
     '''
     _,_, Sb, Sb_X, _ = solveODE(gp, a, b, c, d, Sb_X0, rs)
@@ -572,14 +586,14 @@ def computePhysicalMasksPS(gp, a, b, c, d, Ra, Fr, Fw, Sc, Sb_X0, Sb_0, rs):
 
 def findMixing(fac, Ra0, Fw0):
     '''
-    Increases K_M in case any mask equals 1. This is equivalent to decreasing Ra and Fw by the same factor.
+    Increases K_M in case any mask equals 1. This is equivalent to decreasing Ra and Fw by the same factor. (not used in paper)
     '''
     Ra = Ra0/fac
     Fw = Fw0/fac
     #print('fix')
     return Ra, Fw, True
 
-#def computeScaling()
+# Functions to integrate transport terms horizontally
 
 def Int3(bl, bu, a, b, c):
     return 3*a*(I3(bu,a,b,c)-I3(bl,a,b,c)) + 2*b*(I2(bu,a,b,c)-I2(bl,a,b,c)) + c*(I1(bu,a,b,c)-I1(bl,a,b,c))
@@ -601,8 +615,6 @@ def I0(x, a, b, c):
         I = -2/(2*a*x + b)
     return I
 
-#I0 = np.vectorize(I0a, otypes=[np.ndarray])
-
 def I1(x, a, b, c):
     ''' Compute the integral of u/(au^2 + bu + c) and fill in x'''
     I = 1/(2*a)*np.log(np.abs(a*x**2 + b*x + c)) - b/(2*a)*I0(x,a,b,c)
@@ -620,7 +632,7 @@ def I3(x, a, b, c):
 
 def computeScore(T):
     '''
-    Computes scores of Regime 1 (Dispersive), Regime 2 (Chatwin) and 2 (Wind-Driven). Sum of these scores is 1 (by definition)
+    Computes scaled magnitudes of transport terms 
     '''
     #print(T)
     #s = np.array([T[6], T[0]+T[1]+T[3], abs(T[2]) + abs(T[4]) + abs(T[5])])/np.sum(np.abs(T[0:7]))
@@ -656,6 +668,8 @@ def computeRegimeOld(T):
     
     Output: RBG regime vector.
     
+    Not used in paper
+    
     '''
     
     s = computeScore(T)
@@ -680,31 +694,25 @@ def computeTheory(gp, L, Sb_0):
                 -L[4]/L[7]*np.log(ep),
                 -L[5]/L[7]*np.log(ep),
                 -L[6]/L[7]*np.log(ep),
-                np.abs(L[0]*Sb_0/L[2]*(1-ep))] #Balance of GG and up-estuary GW
+                np.abs(L[0]*Sb_0/L[2]*(1-ep))]
         )
-        
-    
-        
     return LsT
     
-def computeWeM(gp, Ra, Fr, Fw, Sb_X0, Sb_0, Xs):
+def computeWeM(gp, Ra, Fr, Fw, Sb_X0, Sb_0, Xs): # Compute Wedderburn number and Mixing number (Burchard and Geyer)
     R = gp['R']
     We0 = Fw/(Ra*Sb_X0)
     M0 = 4*(-1/8*R/(R+3)*Fr + (-1/30+3/64*(R+4)/(R+3) - 1/96*(R+6)/(R+3))*Ra*Sb_X0 + (-3/16*(R+2)/(R+3) + 1/3 - 1/8*(R+4)/(R+3))*Fw)
     return We0, M0
     
-    
-#def initMixPar(gp):
-    #mixPar = dict()
-def symlog10(x,l = 1/(5*np.log(10))):
+def symlog10(x,l = 1/(5*np.log(10))): # Function used in 
     return np.sign(x)*np.log10(1.0 + np.abs(x/l))
     
 def invsymlog10(y,l = 1/(5*np.log(10))):
     return np.sign(y)*l*(-1.0 + 10**np.abs(y))
     
-def addC(R):
+def addC(R): # Constants appearing in the equations (see appendix A). In the paper, R = a = 2
     C = np.zeros(12)
-    if R != 'Inf':
+    if R != 'Inf': # Finite R
         C[0] = (19*R**2+285*R+1116)/(1451520*R**2 + 8709120*R + 13063680) #-P2P5
         C[1] = (19*R**2+153*R)/(20160*R**2 + 120960*R + 181440) #-P1P5 = -P2P4 (sum)
         C[2] = (7*R**2+91*R+306)/(40320*R**2 + 241920*R + 362880) #-P3P5 = -P2P6 (sum)
@@ -738,7 +746,7 @@ def addC(R):
         C[11] = 1/120 #P6(-1) 
     return C
 
-def formFunctions(sigmap, R):
+def formFunctions(sigmap, R): # Polynomial form functions (Appendix A)
     if R != 'Inf':    
         R3 = 1/(R+3)
         P1 = R*R3*(1/2-3/2*sigmap**2)
@@ -759,5 +767,3 @@ def formFunctions(sigmap, R):
         P7 = -5/48 - 1/24*sigmap**4 - 1/16*sigmap**3
     
     return P1, P2, P3, P4, P5, P6, P7
-
-#integral functions for computing transport terms

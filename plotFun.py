@@ -594,6 +594,7 @@ def plotDimNDim(pp, PSDList, dimDictList, PSList):
                 lsi = 0
                 for di in [3*i,3*i+1, 3*i+2]:
                     _, Phi_0, LsDim, varx, Regcolor, extentp, extentld, _, _, _, _ = PSD2Plot(PSDList[di], dimDictList[di])            
+                    #varx = np.sign(varx)*np.sqrt(np.abs(varx)/(2.6e-3*1.225))
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
                     FwR = np.ma.masked_outside(symlog10(PSDList[di].Fw[nm]), symlog10(-1), symlog10(8)) # Dimensional
                     RaR = np.ma.masked_outside(np.log10(PSDList[di].Ra[nm]), np.log10(25), 5)# Dimensional
@@ -601,14 +602,16 @@ def plotDimNDim(pp, PSDList, dimDictList, PSList):
                         ax.set_title(f"Regimes: H = {dimDictList[3*i]['H']} m")
                     else:
                         ax.set_title(f"H = {dimDictList[3*i]['H']} m")
+                    #ax.set_title(PSList[i].name)
                     ax.plot(FwR, RaR, lw = 2, ls = ls[lsi], c = 'k') #Here, we assume Fw on x axis and Ra on y            ax.set_title(f"Regimes")
                     lsi += 1
                 ax.plot([0,0], [np.amin(varyN), np.amax(varyN)], c = 'w', lw = .5, ls = ':') #look at this!!!
-            # Right plot
+            # middle plot
             if j==1:
                 lsi = 0
                 for di in [3*i,3*i+1, 3*i+2]:
                     _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot(PSDList[di], dimDictList[di])
+                    #varx = np.sign(varx)*np.sqrt(np.abs(varx)/(2.6e-3*1.225))
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
                     Regcolor[Regcolor<0] = 0
                     Regcolor[Regcolor>1] = 1
@@ -623,6 +626,7 @@ def plotDimNDim(pp, PSDList, dimDictList, PSList):
                 lsi=0
                 for di in [3*i,3*i+1, 3*i+2]:
                     _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot(PSDList[di], dimDictList[di])
+                    #varx = np.sign(varx)*np.sqrt(np.abs(varx)/(2.6e-3*1.225))
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)       
                     Regcolor[Regcolor<0] = 0
                     Regcolor[Regcolor>1] = 1
@@ -641,7 +645,7 @@ def plotDimNDim(pp, PSDList, dimDictList, PSList):
                 
             if [i,j]==[2,0]: ax.set_xlabel(r'Fw')
             if [i,j] in [[2,1], [2,2]]:
-                ax.set_xlabel(r'$\tau_w$')
+                ax.set_xlabel(r'$\tau_w$ [Pa]')
             if [i,j] == [0,2]:
                 ax.title.set_text(r'Salt intrusion $L_s$')
             if [i,j] == [0,1]:
@@ -652,22 +656,34 @@ def plotDimNDim(pp, PSDList, dimDictList, PSList):
                 plt.xticks(FwV, FwT)
             else:
                 plt.xticks(tauwV, tauwT)
-                
-def plotNDimNDim(pp, PSList):
+
+def plotDimNDimData(pp, PSDList, dimDictList, PSList, PSSList, datList):
     '''Last figure of discussion. Purpose: show trajectory of dimensionless numbers obtained from a dimensional simulation.'''
     col = ['tab:green','tab:green', 'tab:orange', 'tab:green','tab:orange','tab:orange', 'tab:blue', 'tab:gray']
     ls = ['-', '--', '--', '-.', '-.', '-', '-', '-']    
     labT = ['GG', 'GR', 'GW', 'RR', 'RW', 'WW', 'D', '|FL|']
-    namex, Phi_0, LsDim, varx, Regcolor, extentp, extentld, LDd, LGGd, LWWd, LGWd = PSD2Plot(PSDList[0], dimDictList[0])
+    #namex, Phi_0, LsDim, varx, Regcolor, extentp, extentld, LDd, LGGd, LWWd, LGWd = PSD2Plot(PSDList[0], dimDictList[0])
     fig = plt.figure(constrained_layout=True)
+    
+    sc = 100
+    ms = 50
+    #set_powerlimits() 
     fig.tight_layout()
     s4 = fig.add_gridspec(ncols = 3, nrows = 3)
     
-    FwT = ['-1', '-.25', '0', '.25',  '1', '4', '8']
-    tauwT = ['-.5', '-.1', '0', '.1', '.5', '2', '8']
-    
+    FwT = ['-1', '-.25', '0', '.25',  '1', '4', '8']    
     FwV = symlog10(np.array([-1, -.25, 0, .25, 1, 4, 8]))
+
+    tauwT = ['-.5', '-.1', '0', '.1', '.5', '2', '8']
     tauwV = symlog10(np.array([-.5, -.1, 0, .1, .5, 2, 8]))
+    
+    
+    uaT = ['-8', '-3', '0', '3', '8']
+    uaV = np.asarray(uaT)
+    uaV = uaV.astype(float)
+    uaV = symlog10(uaV, sc)
+    
+    
     ls = ['-', '--', ':']
     for i in range(3):
         for j in range(3):
@@ -677,58 +693,63 @@ def plotNDimNDim(pp, PSList):
             if j==0:
                 RegcolorN, varxN, varyN = PS2Reg(pp, PSList[i]) # Dimensionless
                 cfig = ax.imshow(RegcolorN, extent = (np.amin(varxN), np.amax(varxN), np.amin(varyN), np.amax(varyN)), origin = 'lower', aspect = 'auto')
+                
                 lsi = 0
                 for di in [3*i,3*i+1, 3*i+2]:
-                    _, Phi_0, LsDim, varx, _, Regcolor, extentp, extentld,_,_,_,_ = PS2Plot(PSDList[di], dimDictList[di])            
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld, _, _, _, _ = PSD2Plot_Ua(PSDList[di], dimDictList[di], sc)            
+                    
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
                     FwR = np.ma.masked_outside(symlog10(PSDList[di].Fw[nm]), symlog10(-1), symlog10(8)) # Dimensional
                     RaR = np.ma.masked_outside(np.log10(PSDList[di].Ra[nm]), np.log10(25), 5)# Dimensional
-                    if i==0:
-                        ax.set_title(f"Regimes: H = {dimDictList[3*i]['H']} m")
-                    else:
-                        ax.set_title(f"H = {dimDictList[3*i]['H']} m")
+                
+                    #ax.set_title(f"Regimes: H = {dimDictList[3*i]['H']} m")
+                    ax.set_title(PSList[i].name)
                     ax.plot(FwR, RaR, lw = 2, ls = ls[lsi], c = 'k') #Here, we assume Fw on x axis and Ra on y            ax.set_title(f"Regimes")
+                    plt.scatter(symlog10(PSSList[di].Fw), np.log10(PSSList[di].Ra), c = 'tab:orange', s = ms, marker = 'o', edgecolors = 'k', zorder = 2)
                     lsi += 1
                 ax.plot([0,0], [np.amin(varyN), np.amax(varyN)], c = 'w', lw = .5, ls = ':') #look at this!!!
-            # Right plot
+            # middle plot
             if j==1:
                 lsi = 0
                 for di in [3*i,3*i+1, 3*i+2]:
-                    _, Phi_0, LsDim, varx, _, Regcolor, extentp, extentld,_,_,_,_ = PS2Plot(PSDList[di], dimDictList[di])
-                    # namex,Phi_0,Ls,varx,Reg,Regcolor, extentp, extentl
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot_Ua(PSDList[di], dimDictList[di], sc)
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)
                     Regcolor[Regcolor<0] = 0
                     Regcolor[Regcolor>1] = 1
                     plt.scatter(varx[nm], Phi_0[nm], c = np.reshape(Regcolor[0,nm,:],[sum(nm),3]) , edgecolor = 'none')
                     ax.plot(varx[nm], Phi_0[nm], c = 'k', ls = ls[lsi])
+                    plt.scatter(symlog10(datList[di][0], sc), PSSList[di].Phi_0, c = 'tab:orange', s = ms, marker = 'o', edgecolors = 'k', zorder = 2)
                     lsi += 1
-                    ax.plot([0,0], [extentp[2], extentp[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
+                    #ax.plot([0,0], [extentp[2], extentp[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
                 ax.set_ylabel(r'$\Phi_0$')
                 plt.grid(True)
             # Right plot
             if j==2:
                 lsi=0
                 for di in [3*i,3*i+1, 3*i+2]:
-                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PS2Plot(PSDList[di], dimDictList[di])
+                    _, Phi_0, LsDim, varx, Regcolor, extentp, extentld,_,_,_,_ = PSD2Plot_Ua(PSDList[di], dimDictList[di], sc)
                     nm = np.logical_and(~PSDList[di].mask[:,7], np.amax(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)<=1, np.amin(np.reshape(Regcolor[0,:,:],[np.shape(Regcolor)[1],3]), axis = 1)>=0)       
                     Regcolor[Regcolor<0] = 0
                     Regcolor[Regcolor>1] = 1
                     ax.scatter(varx[nm], LsDim[nm], c = np.reshape(Regcolor[0,nm,:],[sum(nm),3]) , edgecolor = 'none')
                     ax.plot(varx[nm], LsDim[nm], c = 'k', ls = ls[lsi])
+                    c = np.sqrt(datList[di][1]['s_0']*datList[di][1]['beta']*datList[di][1]['g']*datList[di][1]['H'])
+                    Ld = datList[di][1]['K_H']/c
+                    plt.scatter(symlog10(datList[di][0], sc), -PSSList[di].Xs*Ld, c = 'tab:orange', s = ms, marker = 'o', edgecolors = 'k', zorder = 2)
                     lsi += 1
                     #ls = '--'
-                    ax.plot([0,0], [extentld[2], extentld[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
+                    #ax.plot([0,0], [extentld[2], extentld[3]], c = 'k', lw = .5, ls = ':') #look at this!!!
                 ax.set_yscale('log')
                 ax.set_ylabel(r'$L_s [m]$')
                 plt.grid(True)
                 #if 'tau_w' in namex:
                     #plt.xticks(np.linspace(np.amin(varx), np.amax(varx), 5), FwTicks)
-            if i in [0,1]:
+            if [i,j] in [[0,0], [1,0]]:
                 plt.setp(ax.get_xticklabels(), visible = False)
                 
             if [i,j]==[2,0]: ax.set_xlabel(r'Fw')
             if [i,j] in [[2,1], [2,2]]:
-                ax.set_xlabel(r'$\tau_w$')
+                ax.set_xlabel(r'$u_a [m/s]$')
             if [i,j] == [0,2]:
                 ax.title.set_text(r'Salt intrusion $L_s$')
             if [i,j] == [0,1]:
@@ -738,7 +759,8 @@ def plotNDimNDim(pp, PSList):
                 plt.yticks([2,3,4,5], ['$10^2$', '$10^3$', '$10^4$', '$10^5$'])
                 plt.xticks(FwV, FwT)
             else:
-                plt.xticks(tauwV, tauwT)
+                plt.xticks(uaV, uaT)
+            ax.autoscale(enable=True, tight=True)
 
 def PSD2Plot(PS, dimDict):
     namex = dimDict['pars'][0]
@@ -774,25 +796,42 @@ def PSD2Plot(PS, dimDict):
     LGWd = LGW*LDim
     return namex,Phi_0,LsDim,varx,Regcolor,extentp,extentld,LDd,LGGd,LWWd,LGWd
 
-def PS2Plot(PS, nondimDict):
-    namex = nondimDict['pars'][0]
+
+def PSD2Plot_Ua(PS, dimDict, sc):
+    namex = dimDict['pars'][0]
+
+    LsT = PS.LsT
 
     Phi_0, Ls, Reg = np.squeeze(PS.Phi_0), np.abs(np.squeeze(PS.Xs)), np.squeeze(PS.Reg)
+    LDim = dimDict['K_H']/dimDict['c']
+    LsDim = Ls*LDim
 
-    if namex == 'Fw':
-        varx = symlog10(nondimDict[namex])
+    if namex == 'tau_w':
+        varx = dimDict[namex]
+        varx = np.sign(varx)*np.sqrt(np.abs(varx)/(2.6e-3*1.225)) # to get ua
+        varx = symlog10(varx, sc)
     else:
-        varx = np.log10(nondimDict[namex])
+        varx = np.log10(dimDict[namex])
 
     Regcolor = np.array([Reg, Reg])
     extentp = (np.amin(varx), np.amax(varx), np.amin(Phi_0), np.amax(Phi_0))
     #print(extentp)
     Ll, Lu = np.amin(Ls)/1.25, 1.25*np.amax(Ls)
     extentl = (np.amin(varx), np.amax(varx), Ll, Lu)
-
-    return namex,Phi_0,Ls,varx,Reg,Regcolor, extentp, extentl
-
-
+    LlDim, LuDim = np.amin(Ll*LDim)/1.25, np.amax(Lu*LDim)*1.25
+    extentld = (np.amin(varx), np.amax(varx), LlDim, LuDim)
+    #x, y = x.ravel(), y.ravel()
+    
+    LD = np.ma.masked_outside(LsT[:,6], Ll, Lu)
+    LGG = np.ma.masked_outside(LsT[:,0], Ll, Lu)
+    LWW = np.ma.masked_outside(LsT[:,5], Ll, Lu)
+    LGW = np.ma.masked_outside(LsT[:,-1], Ll, Lu)
+    LsDim = np.ma.masked_outside(LsDim, LlDim, LuDim) 
+    LDd = LD*LDim
+    LGGd =  LGG*LDim
+    LWWd = LWW*LDim
+    LGWd = LGW*LDim
+    return namex,Phi_0,LsDim,varx,Regcolor,extentp,extentld,LDd,LGGd,LWWd,LGWd
 
 def PS2Reg(pp, PS):
     ndd = PS.nondimDict

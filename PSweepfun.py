@@ -58,7 +58,6 @@ class ParameterSweep:
                 self.Sb_0[i], self.Phi_0[i] = processBC(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Ra[i], self.Fr[i], self.Fw[i], self.Sc, self.Sb_X0[i])
                 self.rs[i], self.Xs[i], self.rs0[i], self.Xs0[i], self.rs1[i], self.Xs1[i], self.mask[i,1] = computersXs(self.gp, self.a[i], self.b[i], self.c[i], self.d[i], self.Sb_X0[i], self.Fr[i], self.Ra[i], self.Fw[i])
                 self.mask[i,2] = computeNU(self.D2[i], self.Exx[i,:], self.Sb_X0[i], self.rs[i])
-                #self.mask[i,2] = computeNU(self.gp,  self.a[i], self.b[i], self.c[i], self.d[i],  self.Sb_0[i])
                 if nonunique == 0: #Save the original mask for plotting later on.
                     self.maskOri[i,0:3] = self.mask[i,0:3]
                 if not any(self.mask[i,0:3]): #Solution exists and is unique. Possibly unstable stratification / negative salt.
@@ -71,7 +70,7 @@ class ParameterSweep:
                         self.Ra[i], self.Fw[i], self.mask[i,6] = findMixing(fac, self.Ra[i], self.Fw[i])
                         #print(str(i/self.n) + ': PhysMask')
                         continue
-                else: #Solution does not exist/is non-unique: Increase mixing.
+                else: #Solution does not exist/is non-unique: Increase mixing (not used in paper)
                     nonunique =+ 1
                     self.Ra[i], self.Fw[i], self.mask[i,5]  = findMixing(fac, self.Ra[i], self.Fw[i])
                     #print(str(i/self.n) + ': NUMask')                
@@ -85,9 +84,9 @@ class ParameterSweep:
                 i += 1 #Proceed to next parameter tuple, reset iterative parameters.
                 nonunique = 0
                 nonphysical = 0
-                print(i/self.n)
+                #print(i/self.n)
             self.mixIncrease = self.RaOri/self.Ra
-            print(f'rng Fr = {np.amin(self.Fr)} - {np.amax(self.Fr)} and rng Ra {np.amin(self.Ra)} - {np.amax(self.Ra)} and rng Fw {np.amin(self.Fw)} - {np.amax(self.Fw)}')
+            #print(f'rng Fr = {np.amin(self.Fr)} - {np.amax(self.Fr)} and rng Ra {np.amin(self.Ra)} - {np.amax(self.Ra)} and rng Fw {np.amin(self.Fw)} - {np.amax(self.Fw)}')
         else:
             i = 0
             self.mixIncrease = np.ones_like(self.Ra)
@@ -113,7 +112,7 @@ class ParameterSweep:
                     self.Reg[i,:] = np.array([.7,.7,.7])
                 self.mask[i,7] = any(self.mask[i,:])
                 #if np.fmod(100*i, self.n) < .02:
-                print(i/self.n)
+                #print(i/self.n)
                 i += 1 #Proceed to next parameter tuple, reset iterative parameters.
             self.maskOri = self.mask
 
