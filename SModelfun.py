@@ -29,7 +29,10 @@ class SingleNonDim:
             self.L, self.a, self.b, self.c, self.d, self.b0, self.c0 = nonDim2ODECoeff(self.gp, self.Ra, self.Fr, self.Fw, self.Sc)
             #self.D3mouth = computeD3(self.a, self.b0, self.c0, -self.d)
             self.D2, self.Exx, self.Exy = computeLocalExtrema(self.a/self.d, self.b/self.d, self.c/self.d, 0) #Exx = [xright, xleft, xsaddle]
-            self.Sb_X0, self.mask[0] = solveCubic(np.array([self.a,self.b0,self.c0, -self.d]))
+            if self.gp['mc_bc']:
+                self.Sb_X0, self.mask[0] = solveCubic(np.array([self.a,self.b0,self.c0, -self.d]))
+            else:
+                self.Sb_X0, self.mask[0] = solveCubic(np.array([self.a,self.b,self.c, -self.d]))
             #print(self.Sb_X0)
             #print(self.Fr/self.L[0]) 
             if self.mask[0]:
@@ -101,12 +104,22 @@ class SingleNonDim:
         return
     
     def make_dimensional(self, dd):
-        c = np.sqrt(dd['g']*dd['beta']*dd['s_0']*dd['H']) # Velocity scale
-        self.x = self.X*dd['K_H']/c
-        self.xp = self.Xp*dd['K_H']/c
-        self.z = self.sigma*dd['H']
-        self.zp = self.sigmap*dd['H']
-        self.u = self.U*c # Horizontal velocity scale
-        self.w = self.W*dd['K_M']/dd['H'] # Vertical velocity scale (not mentioned in paper)
-        self.s = self.S*dd['s_0'] # Salinity scale
+        us = c = np.sqrt(dd['g']*dd['beta']*dd['s_0']*dd['H']) # Velocity scale
+        xs = dd['K_H']/c # x = X*xs
+        ss = dd['s_0']
+        zs = dd['H']
+        fxs = c/dd['K_H'] # f_x = f_X * fxs
         
+        self.x, self.xp, self.xs, self.xs0, self.xs1 = [xs*i for i in [self.X, self.Xp, self.Xs, self.Xs0, self.Xs1]]
+        self.z, self.zp = [zs*i for i in [self.sigma, self.sigmap]]
+        self.u, self.uG, self.uR, self.uW, self.ubar = [us*i for i in [self.U, self.UG, self.UR, self.UW, self.Ubar]]
+        self.s, self.sb, self.sbar, self.sacc, self.sb_0 = [ss*i for i in [self.S, self.Sb, self.Sbar, self.Sacc, self.Sb_0]]
+        self.sb_x, self.sb_x0, self.sbar_x, self.sacc_x = [ss*fxs*i for i in [self.Sb_X, self.Sb_X0, self.Sbar_X, self.Sacc_X]]
+
+        self.s_xx = ss*xs**2*self.Sb_XX
+        self.w = self.W*dd['K_M']/dd['H'] # Vertical velocity scale (not mentioned in paper)
+        
+    def interp_sbar(self, x):
+        # Function that returns CoefficientFunction that interpolates the 2DV model at mesh points.
+        # Specifically meant for interpolation for x > 0!!
+        return np.interp(x.data, -np.flip(self.x), np.flip(self.sb))
